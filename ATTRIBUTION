@@ -1,0 +1,29 @@
+KaniLocal uses data from the following freely available sources:
+
+KANJIDIC2
+  Source:  The EDRDG (Electronic Dictionary Research and Development Group)
+           https://www.edrdg.org/wiki/index.php/KANJIDIC_Project
+  License: Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+           https://creativecommons.org/licenses/by-sa/4.0/
+  Notes:   KANJIDIC2 is the work of the EDRDG, initiated by Jim Breen.
+
+JMdict / JMdict-simplified
+  Source:  The EDRDG (Electronic Dictionary Research and Development Group)
+           https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project
+  License: Creative Commons Attribution-ShareAlike 4.0 International (CC BY-SA 4.0)
+           https://creativecommons.org/licenses/by-sa/4.0/
+  Notes:   The jmdict-simplified JSON conversion is by Oleksii Shevchuk
+           https://github.com/scriptin/jmdict-simplified
+
+KanjiVG
+  Source:  Ulrich Apel
+           https://kanjivg.tagaini.net/
+  License: Creative Commons Attribution-ShareAlike 3.0 Unported (CC BY-SA 3.0)
+           https://creativecommons.org/licenses/by-sa/3.0/
+  Notes:   KanjiVG provides stroke order data and kanji component decompositions.
+
+---
+
+This application does NOT contain any content copyrighted by Tofugu LLC (WaniKani).
+No WaniKani mnemonics, radical names, or level orderings have been copied.
+The linguistic data (readings, meanings) comes solely from the EDRDG sources above.

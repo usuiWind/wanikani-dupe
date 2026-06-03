@@ -1,0 +1,198 @@
+import Link from "next/link";
+import { Header } from "@/components/layout/Header";
+import { DashboardShortcuts } from "@/components/layout/DashboardShortcuts";
+import { ReviewForecast } from "@/components/dashboard/ReviewForecast";
+import { HeatmapCalendar } from "@/components/dashboard/HeatmapCalendar";
+import { getDueReviews } from "@/lib/actions/reviews";
+import { getAvailableLessonCount } from "@/lib/actions/lessons";
+import { getSettings } from "@/lib/actions/settings";
+import { getReviewForecast, getHeatmapData, getStreakCount } from "@/lib/actions/forecast";
+import { prisma } from "@/lib/prisma";
+import { getSrsGroup } from "@/lib/srs";
+
+async function getDashboardData() {
+  // Round 1: fetch everything that doesn't depend on current level in parallel
+  const [
+    dueReviews, lessonCount, settings, forecast, heatmap, streak,
+    latestProgress, stageCounts,
+  ] = await Promise.all([
+    getDueReviews(),
+    getAvailableLessonCount(),
+    getSettings(),
+    getReviewForecast(),
+    getHeatmapData(),
+    getStreakCount(),
+    prisma.studyProgress.findFirst({
+      where: { started_at: { not: null } },
+      include: { subject: { select: { level: true } } },
+      orderBy: { subject: { level: "desc" } },
+    }),
+    prisma.studyProgress.groupBy({
+      by: ["srs_stage"],
+      where: { srs_stage: { not: null } },
+      _count: { srs_stage: true },
+    }),
+  ]);
+
+  const currentLevel = latestProgress?.subject.level ?? 1;
+
+  // Auto-unlock Level 1 radicals only if no progress exists at all
+  if (!latestProgress && lessonCount === 0) {
+    const level1Radicals = await prisma.subject.findMany({
+      where: { level: 1, type: "radical" },
+      select: { id: true },
+    });
+    if (level1Radicals.length > 0) {
+      await prisma.studyProgress.createMany({
+        data: level1Radicals.map((r) => ({ subject_id: r.id, unlocked_at: new Date() })),
+        skipDuplicates: true,
+      });
+    }
+  }
+
+  // Round 2: current-level radicals and kanji (depends on currentLevel from round 1)
+  const [radicals, kanji] = await Promise.all([
+    prisma.subject.findMany({
+      where: { level: currentLevel, type: "radical" },
+      include: { progress: true },
+    }),
+    prisma.subject.findMany({
+      where: { level: currentLevel, type: "kanji" },
+      include: { progress: true },
+    }),
+  ]);
+
+  const radicalsGuru = radicals.filter((r) => (r.progress?.srs_stage ?? 0) >= 5).length;
+  const kanjiGuru = kanji.filter((k) => (k.progress?.srs_stage ?? 0) >= 5).length;
+
+  const dist = { apprentice: 0, guru: 0, master: 0, enlightened: 0, burned: 0 };
+  for (const row of stageCounts) {
+    if (row.srs_stage != null) {
+      dist[getSrsGroup(row.srs_stage)] += row._count.srs_stage;
+    }
+  }
+
+  return {
+    dueCount: dueReviews.length,
+    lessonCount,
+    currentLevel,
+    radicals,
+    radicalsGuru,
+    kanji,
+    kanjiGuru,
+    dist,
+    settings,
+    forecast,
+    heatmap,
+    streak,
+  };
+}
+
+export default async function Dashboard() {
+  const {
+    dueCount, lessonCount, currentLevel, radicals, radicalsGuru,
+    kanji, kanjiGuru, dist, settings, forecast, heatmap, streak,
+  } = await getDashboardData();
+
+  const radicalPct = radicals.length ? Math.round((radicalsGuru / radicals.length) * 100) : 0;
+  const kanjiPct = kanji.length ? Math.round((kanjiGuru / kanji.length) * 100) : 0;
+
+  return (
+    <div className="flex flex-col min-h-screen">
+      <Header />
+      <DashboardShortcuts />
+      <main className="flex-1 max-w-4xl mx-auto w-full px-4 py-8 space-y-8">
+
+        {settings.vacation_mode && (
+          <div className="bg-yellow/10 border border-yellow rounded-xl p-4 text-yellow text-sm">
+            Vacation mode is active — reviews are frozen. Press <kbd className="bg-yellow/20 px-1 rounded">V</kbd> or use the header button to disable.
+          </div>
+        )}
+
+        <div className="grid grid-cols-2 gap-4">
+          <Link
+            href="/lessons"
+            className={`p-6 rounded-xl bg-mantle border border-surface0 hover:border-blue transition-colors ${
+              lessonCount === 0 ? "opacity-50 pointer-events-none" : ""
+            }`}
+          >
+            <div className="text-4xl font-bold text-blue">{lessonCount}</div>
+            <div className="text-subtext mt-1">Lessons available</div>
+          </Link>
+
+          <Link
+            href="/reviews"
+            className={`p-6 rounded-xl bg-mantle border border-surface0 hover:border-mauve transition-colors ${
+              dueCount === 0 ? "opacity-50 pointer-events-none" : ""
+            }`}
+          >
+            <div className="text-4xl font-bold text-mauve">{dueCount}</div>
+            <div className="text-subtext mt-1">Reviews due</div>
+          </Link>
+        </div>
+
+        <ReviewForecast hourly={forecast.hourly} daily={forecast.daily} />
+
+        <div className="bg-mantle border border-surface0 rounded-xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold text-text">Level {currentLevel} Progress</h2>
+            <Link href="/levels" className="text-sm text-blue hover:underline">View all levels</Link>
+          </div>
+          <div className="space-y-3">
+            <div>
+              <div className="flex justify-between text-sm mb-1">
+                <span className="text-blue">Radicals</span>
+                <span className="text-subtext">{radicalsGuru}/{radicals.length} Guru</span>
+              </div>
+              <div className="h-2 bg-surface0 rounded-full overflow-hidden">
+                <div className="h-full bg-blue rounded-full transition-all" style={{ width: `${radicalPct}%` }} />
+              </div>
+            </div>
+            <div>
+              <div className="flex justify-between text-sm mb-1">
+                <span className="text-mauve">Kanji</span>
+                <span className="text-subtext">{kanjiGuru}/{kanji.length} Guru (need 90%)</span>
+              </div>
+              <div className="h-2 bg-surface0 rounded-full overflow-hidden">
+                <div className="h-full bg-mauve rounded-full transition-all" style={{ width: `${kanjiPct}%` }} />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="bg-mantle border border-surface0 rounded-xl p-6">
+          <h2 className="font-semibold text-text mb-4">Items by Stage</h2>
+          <div className="grid grid-cols-5 gap-3 text-center">
+            {[
+              { label: "Apprentice", count: dist.apprentice, color: "text-red" },
+              { label: "Guru", count: dist.guru, color: "text-mauve" },
+              { label: "Master", count: dist.master, color: "text-blue" },
+              { label: "Enlightened", count: dist.enlightened, color: "text-sky" },
+              { label: "Burned", count: dist.burned, color: "text-overlay" },
+            ].map(({ label, count, color }) => (
+              <div key={label} className="bg-surface0 rounded-lg p-3">
+                <div className={`text-2xl font-bold ${color}`}>{count}</div>
+                <div className="text-xs text-subtext mt-1">{label}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <HeatmapCalendar data={heatmap} streak={streak} />
+
+        <div className="bg-mantle border border-surface0 rounded-xl p-4 text-xs text-subtext">
+          <div className="font-medium text-text mb-2">Keyboard shortcuts</div>
+          <div className="grid grid-cols-2 gap-x-8 gap-y-1">
+            <span><kbd className="bg-surface0 px-1 rounded">V</kbd> Toggle vacation mode</span>
+            <span><kbd className="bg-surface0 px-1 rounded">Enter</kbd> Submit answer (in reviews)</span>
+            <span><kbd className="bg-surface0 px-1 rounded">←</kbd> <kbd className="bg-surface0 px-1 rounded">→</kbd> Navigate history</span>
+            <span><kbd className="bg-surface0 px-1 rounded">Backspace</kbd> Undo last answer</span>
+            <span><kbd className="bg-surface0 px-1 rounded">Space</kbd> Flip flashcard</span>
+            <span><kbd className="bg-surface0 px-1 rounded">1</kbd> Knew it · <kbd className="bg-surface0 px-1 rounded">2</kbd> Missed it</span>
+          </div>
+        </div>
+
+      </main>
+    </div>
+  );
+}

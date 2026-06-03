@@ -1,0 +1,52 @@
+@import "tailwindcss";
+
+/* KDE Breeze Dark */
+:root {
+  --base: #27292c;
+  --mantle: #202326;
+  --crust: #141618;
+  --text: #fcfcfc;
+  --subtext: #a1a9b1;
+  --surface0: #292c30;
+  --surface1: #1d1f22;
+  --overlay: #5c6066;
+
+  --blue: #3daee9;
+  --mauve: #9b59b6;
+  --pink: #7d5fff;
+  --green: #27ae60;
+  --red: #da4453;
+  --yellow: #f67400;
+  --peach: #f67400;
+  --teal: #1d99f3;
+  --sky: #1d99f3;
+}
+
+@theme inline {
+  --color-base: var(--base);
+  --color-mantle: var(--mantle);
+  --color-crust: var(--crust);
+  --color-text: var(--text);
+  --color-subtext: var(--subtext);
+  --color-surface0: var(--surface0);
+  --color-surface1: var(--surface1);
+  --color-overlay: var(--overlay);
+
+  --color-blue: var(--blue);
+  --color-mauve: var(--mauve);
+  --color-pink: var(--pink);
+  --color-green: var(--green);
+  --color-red: var(--red);
+  --color-yellow: var(--yellow);
+  --color-peach: var(--peach);
+  --color-teal: var(--teal);
+  --color-sky: var(--sky);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--base);
+  color: var(--text);
+}

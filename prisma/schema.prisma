@@ -1,0 +1,140 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum SubjectType {
+  radical
+  kanji
+  vocabulary
+}
+
+enum ReadingType {
+  onyomi
+  kunyomi
+  vocab
+}
+
+model Subject {
+  id              String      @id
+  type            SubjectType
+  level           Int
+  characters      String?
+  image_url       String?
+  primary_reading String?
+  jlpt_level      Int?
+  grade           Int?
+  stroke_count    Int?
+  frequency_rank  Int?
+  created_at      DateTime    @default(now())
+  updated_at      DateTime    @updatedAt
+
+  meanings   SubjectMeaning[]
+  readings   SubjectReading[]
+  mnemonic   Mnemonic?
+  progress   StudyProgress?
+
+  components SubjectComponent[] @relation("subject_components")
+  usedIn     SubjectComponent[] @relation("component_subjects")
+
+  reviewsLog ReviewsLog[]
+
+  @@index([level, type])
+}
+
+model SubjectMeaning {
+  id         Int     @id @default(autoincrement())
+  subject_id String
+  text       String
+  is_primary Boolean @default(false)
+
+  subject Subject @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+}
+
+model SubjectReading {
+  id           Int         @id @default(autoincrement())
+  subject_id   String
+  text         String
+  reading_type ReadingType
+  is_primary   Boolean     @default(false)
+
+  subject Subject @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+}
+
+model SubjectComponent {
+  subject_id   String
+  component_id String
+
+  subject   Subject @relation("subject_components", fields: [subject_id], references: [id], onDelete: Cascade)
+  component Subject @relation("component_subjects", fields: [component_id], references: [id], onDelete: Cascade)
+
+  @@id([subject_id, component_id])
+}
+
+model Mnemonic {
+  subject_id       String  @id
+  meaning_mnemonic String?
+  reading_mnemonic String?
+
+  subject Subject @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+}
+
+model StudyProgress {
+  subject_id      String    @id
+  srs_stage       Int?
+  unlocked_at     DateTime?
+  started_at      DateTime?
+  next_review_at  DateTime?
+  passed_at       DateTime?
+  burned_at       DateTime?
+  total_correct    Int       @default(0)
+  total_incorrect  Int       @default(0)
+  leech_score      Float     @default(0)
+  last_reviewed_at DateTime?
+
+  subject Subject @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+
+  @@index([next_review_at])
+}
+
+model ReviewsLog {
+  id                      Int       @id @default(autoincrement())
+  subject_id              String
+  started_at              DateTime
+  ended_at                DateTime?
+  incorrect_meaning_count Int       @default(0)
+  incorrect_reading_count Int       @default(0)
+  resulting_stage         Int?
+
+  subject Subject @relation(fields: [subject_id], references: [id], onDelete: Cascade)
+}
+
+model Settings {
+  id                  Int       @id @default(1)
+  batch_size          Int       @default(5)
+  daily_new_cap       Int?
+  flashcard_default   Boolean   @default(false)
+  vacation_mode       Boolean   @default(false)
+  vacation_started_at DateTime?
+  theme               String    @default("breeze-dark")
+  answer_strictness   String    @default("normal")
+  accept_all_readings Boolean   @default(true)
+  lesson_order        String    @default("level_type")
+  session_item_cap    Int?
+  leech_threshold     Float     @default(1.0)
+}
+
+model DailyActivity {
+  id           Int      @id @default(autoincrement())
+  date         DateTime @unique @db.Date
+  reviews_done Int      @default(0)
+  lessons_done Int      @default(0)
+  correct      Int      @default(0)
+  incorrect    Int      @default(0)
+}
