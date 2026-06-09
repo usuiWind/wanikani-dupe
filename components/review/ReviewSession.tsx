@@ -78,7 +78,7 @@ export function ReviewSession({ subjects, acceptAllReadings = true }: Props) {
 
       {/* Stats row */}
       <div className="flex justify-between px-4 py-2 text-sm text-subtext bg-mantle border-b border-surface0">
-        <span>{store.queue.length} remaining</span>
+        <span>{store.totalCount() - store.completedCount()} remaining</span>
         <div className="flex items-center gap-3">
           <span>{store.correctPercent()}% correct</span>
           <button

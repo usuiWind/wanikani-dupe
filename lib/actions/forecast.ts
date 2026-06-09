@@ -16,9 +16,9 @@ export async function getReviewForecast() {
 
   // Find current level
   const latestProgress = await prisma.studyProgress.findFirst({
-    where: { started_at: { not: null } },
+    where: { started_at: { not: null }, srs_stage: { gte: 1, lte: 8 } },
     include: { subject: { select: { level: true } } },
-    orderBy: { subject: { level: "desc" } },
+    orderBy: { started_at: "desc" },
   });
   const currentLevel = latestProgress?.subject.level ?? 1;
 
@@ -90,6 +90,7 @@ export async function getHeatmapData() {
   return prisma.dailyActivity.findMany({
     where: { date: { gte: since } },
     orderBy: { date: "asc" },
+    select: { date: true, reviews_done: true },
   });
 }
 

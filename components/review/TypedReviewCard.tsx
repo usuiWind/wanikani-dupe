@@ -4,10 +4,9 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useSessionStore } from "@/store/session";
 import { SubjectBadge } from "@/components/shared/SubjectBadge";
 import { SrsChip } from "@/components/shared/SrsChip";
-import { isNearMiss } from "@/lib/fuzzy";
 import * as wanakana from "wanakana";
 
-type AnswerState = "idle" | "correct" | "wrong" | "nearmiss";
+type AnswerState = "idle" | "correct" | "wrong";
 
 export function TypedReviewCard({
   acceptAllReadings = true,
@@ -21,8 +20,11 @@ export function TypedReviewCard({
   const [answer, setAnswer] = useState("");
   const [answerState, setAnswerState] = useState<AnswerState>("idle");
   const [showInfo, setShowInfo] = useState(false);
-  const [shake, setShake] = useState(false);
+  const [showClearHint, setShowClearHint] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const isBound = useRef(false);
+  const clearHintRef = useRef(false);
+  const clearTimerRef = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
     setAnswer("");
@@ -31,18 +33,33 @@ export function TypedReviewCard({
     setTimeout(() => inputRef.current?.focus(), 50);
   }, [current?.subject.id, current?.promptType]);
 
+  // Reset clear hint whenever we return to idle
+  useEffect(() => {
+    if (answerState === "idle") {
+      clearHintRef.current = false;
+      setShowClearHint(false);
+      clearTimeout(clearTimerRef.current);
+    }
+  }, [answerState]);
+
   const bindWanakana = useCallback(
     (el: HTMLInputElement | null) => {
       const ref = inputRef as React.MutableRefObject<HTMLInputElement | null>;
       if (!el) {
-        if (ref.current) wanakana.unbind(ref.current);
+        if (ref.current && isBound.current) {
+          wanakana.unbind(ref.current);
+          isBound.current = false;
+        }
         ref.current = null;
         return;
       }
-      // Always unbind first so a previous reading binding doesn't carry over to meaning
-      wanakana.unbind(el);
+      if (isBound.current) {
+        wanakana.unbind(el);
+        isBound.current = false;
+      }
       if (current?.promptType === "reading") {
         wanakana.bind(el, { IMEMode: true });
+        isBound.current = true;
       }
       ref.current = el;
     },
@@ -53,30 +70,24 @@ export function TypedReviewCard({
     if (!current || answerState !== "idle") return;
 
     const { subject, promptType } = current;
-    const trimmed = answer.trim().toLowerCase();
+    // Read live DOM value to catch any pending wanakana conversion React state hasn't synced yet
+    const liveValue = inputRef.current?.value ?? answer;
+    if (liveValue !== answer) setAnswer(liveValue);
+    const trimmed = liveValue.trim().toLowerCase();
     if (!trimmed) return;
 
     let correct = false;
-    let nearMiss = false;
 
     if (promptType === "meaning") {
       const accepted = subject.meanings.map((m) => m.toLowerCase());
       correct = accepted.includes(trimmed);
-      if (!correct) nearMiss = isNearMiss(trimmed, subject.meanings);
     } else {
       const candidates = acceptAllReadings
         ? subject.readings
         : subject.primaryReading
         ? [subject.primaryReading]
         : subject.readings;
-      correct = candidates.some((r) => r === answer.trim());
-    }
-
-    if (nearMiss && !correct) {
-      setShake(true);
-      setTimeout(() => setShake(false), 500);
-      setAnswerState("nearmiss");
-      return;
+      correct = candidates.some((r) => r === liveValue.trim());
     }
 
     setAnswerState(correct ? "correct" : "wrong");
@@ -105,12 +116,30 @@ export function TypedReviewCard({
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Enter") {
-        if (answerState === "idle" || answerState === "nearmiss") handleSubmit();
+        if (answerState === "idle") handleSubmit();
         else handleNext();
       }
-      if (e.key === "Backspace" && answer === "" && store.pendingUndo && answerState === "idle") {
+      if (e.key === "Backspace" && answerState === "idle" && answer === "" && store.pendingUndo) {
         e.preventDefault();
         handleUndo();
+      }
+      if (e.key === "Backspace" && (answerState === "wrong" || answerState === "correct")) {
+        e.preventDefault();
+        if (clearHintRef.current) {
+          clearTimeout(clearTimerRef.current);
+          clearHintRef.current = false;
+          setShowClearHint(false);
+          setAnswer("");
+          setAnswerState("idle");
+          setShowInfo(false);
+        } else {
+          clearHintRef.current = true;
+          setShowClearHint(true);
+          clearTimerRef.current = setTimeout(() => {
+            clearHintRef.current = false;
+            setShowClearHint(false);
+          }, 1500);
+        }
       }
     };
     window.addEventListener("keydown", onKey);
@@ -124,16 +153,14 @@ export function TypedReviewCard({
   const borderColor =
     answerState === "correct" ? "border-green"
     : answerState === "wrong" ? "border-red"
-    : answerState === "nearmiss" ? "border-yellow"
     : "border-surface1";
   const inputBg =
     answerState === "correct" ? "bg-green/10"
     : answerState === "wrong" ? "bg-red/10"
-    : answerState === "nearmiss" ? "bg-yellow/10"
     : "bg-surface0";
 
   return (
-    <div className={`w-full max-w-xl space-y-6 ${shake ? "animate-pulse" : ""}`}>
+    <div className="w-full max-w-xl space-y-6">
       <div className="flex flex-col items-center gap-3">
         <SubjectBadge type={subject.type} characters={subject.characters} size="xl" />
         <SrsChip stage={subject.srsStage} />
@@ -159,21 +186,15 @@ export function TypedReviewCard({
           ref={bindWanakana}
           type="text"
           value={answer}
-          onChange={(e) => (answerState === "idle" || answerState === "nearmiss") && setAnswer(e.target.value)}
+          onChange={(e) => answerState === "idle" && setAnswer(e.target.value)}
           placeholder={promptType === "meaning" ? "Type the meaning..." : "Type the reading..."}
           className="w-full bg-transparent px-4 py-4 text-center text-xl text-text outline-none placeholder:text-overlay"
           lang={promptType === "reading" ? "ja" : undefined}
-          readOnly={answerState === "correct" || answerState === "wrong"}
+          readOnly={answerState !== "idle"}
         />
       </div>
 
-      {answerState === "nearmiss" && (
-        <div className="text-center text-sm text-yellow">
-          Close! Check your spelling and try again.
-        </div>
-      )}
-
-      {answerState !== "idle" && answerState !== "nearmiss" && (
+      {answerState !== "idle" && (
         <div className={`text-center text-sm ${answerState === "correct" ? "text-green" : "text-red"}`}>
           {answerState === "correct" ? "Correct!" : `Wrong — expected: ${
             promptType === "meaning"
@@ -183,8 +204,14 @@ export function TypedReviewCard({
         </div>
       )}
 
+      {showClearHint && (
+        <div className="text-center text-xs text-subtext">
+          Press ⌫ again to clear and retype
+        </div>
+      )}
+
       <div className="flex gap-3">
-        {answerState === "idle" || answerState === "nearmiss" ? (
+        {answerState === "idle" ? (
           <button
             onClick={handleSubmit}
             className="flex-1 py-3 bg-blue text-white rounded-lg font-semibold hover:opacity-90 transition-opacity"

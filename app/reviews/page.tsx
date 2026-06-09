@@ -26,6 +26,7 @@ export default async function ReviewsPage() {
     type: s.type as "radical" | "kanji" | "vocabulary",
     level: s.level,
     characters: s.characters,
+    imageUrl: s.image_url,
     meanings: s.meanings.map((m) => m.text),
     readings: s.readings.map((r) => r.text),
     primaryReading: s.primary_reading,

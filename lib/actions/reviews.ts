@@ -5,6 +5,14 @@ import { computeNextStage, scheduleNextReview } from "@/lib/srs";
 import { computeLeechScore } from "@/lib/leech";
 import { revalidatePath } from "next/cache";
 
+export async function getDueReviewCount(): Promise<number> {
+  const settings = await prisma.settings.findUnique({ where: { id: 1 } });
+  if (settings?.vacation_mode) return 0;
+  return prisma.studyProgress.count({
+    where: { srs_stage: { gte: 1, lte: 8 }, next_review_at: { lte: new Date() } },
+  });
+}
+
 export async function getDueReviews() {
   const settings = await prisma.settings.findUnique({ where: { id: 1 } });
   if (settings?.vacation_mode) return [];
@@ -152,9 +160,9 @@ async function unlockDependents(componentId: string, now: Date) {
 
 async function checkLevelUp(now: Date) {
   const latestProgress = await prisma.studyProgress.findFirst({
-    where: { started_at: { not: null } },
+    where: { started_at: { not: null }, srs_stage: { gte: 1, lte: 8 } },
     include: { subject: { select: { level: true } } },
-    orderBy: { subject: { level: "desc" } },
+    orderBy: { started_at: "desc" },
   });
 
   if (!latestProgress) return;

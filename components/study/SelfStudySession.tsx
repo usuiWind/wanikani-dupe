@@ -12,6 +12,7 @@ function toReviewSubject(s: any): ReviewSubject {
     type: s.type,
     level: s.level,
     characters: s.characters,
+    imageUrl: s.image_url ?? null,
     meanings: s.meanings.map((m: any) => m.text),
     readings: s.readings.map((r: any) => r.text),
     primaryReading: s.primary_reading,

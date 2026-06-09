@@ -7,8 +7,8 @@ export async function Header() {
 
   return (
     <header className="bg-mantle border-b border-surface0 px-4 py-3 flex items-center justify-between">
-      <Link href="/" className="text-xl font-bold text-blue tracking-wide">
-        KaniLocal
+      <Link href="/" className="text-xl font-bold text-blue tracking-wide flex items-center gap-2">
+        <span>🦀</span>KaniLocal
       </Link>
 
       <nav className="flex items-center gap-6 text-sm text-subtext">

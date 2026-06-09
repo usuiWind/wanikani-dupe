@@ -3,7 +3,7 @@ import { Header } from "@/components/layout/Header";
 import { DashboardShortcuts } from "@/components/layout/DashboardShortcuts";
 import { ReviewForecast } from "@/components/dashboard/ReviewForecast";
 import { HeatmapCalendar } from "@/components/dashboard/HeatmapCalendar";
-import { getDueReviews } from "@/lib/actions/reviews";
+import { getDueReviewCount } from "@/lib/actions/reviews";
 import { getAvailableLessonCount } from "@/lib/actions/lessons";
 import { getSettings } from "@/lib/actions/settings";
 import { getReviewForecast, getHeatmapData, getStreakCount } from "@/lib/actions/forecast";
@@ -13,19 +13,19 @@ import { getSrsGroup } from "@/lib/srs";
 async function getDashboardData() {
   // Round 1: fetch everything that doesn't depend on current level in parallel
   const [
-    dueReviews, lessonCount, settings, forecast, heatmap, streak,
+    dueCount, lessonCount, settings, forecast, heatmap, streak,
     latestProgress, stageCounts,
   ] = await Promise.all([
-    getDueReviews(),
+    getDueReviewCount(),
     getAvailableLessonCount(),
     getSettings(),
     getReviewForecast(),
     getHeatmapData(),
     getStreakCount(),
     prisma.studyProgress.findFirst({
-      where: { started_at: { not: null } },
-      include: { subject: { select: { level: true } } },
-      orderBy: { subject: { level: "desc" } },
+      where: { started_at: { not: null }, srs_stage: { gte: 1, lte: 8 } },
+      select: { subject: { select: { level: true } } },
+      orderBy: { started_at: "desc" },
     }),
     prisma.studyProgress.groupBy({
       by: ["srs_stage"],
@@ -50,20 +50,17 @@ async function getDashboardData() {
     }
   }
 
-  // Round 2: current-level radicals and kanji (depends on currentLevel from round 1)
-  const [radicals, kanji] = await Promise.all([
-    prisma.subject.findMany({
-      where: { level: currentLevel, type: "radical" },
-      include: { progress: true },
+  // Round 2: current-level counts (depends on currentLevel from round 1)
+  const [radicalTotal, kanjiTotal, radicalsGuru, kanjiGuru] = await Promise.all([
+    prisma.subject.count({ where: { level: currentLevel, type: "radical" } }),
+    prisma.subject.count({ where: { level: currentLevel, type: "kanji" } }),
+    prisma.studyProgress.count({
+      where: { subject: { level: currentLevel, type: "radical" }, srs_stage: { gte: 5 } },
     }),
-    prisma.subject.findMany({
-      where: { level: currentLevel, type: "kanji" },
-      include: { progress: true },
+    prisma.studyProgress.count({
+      where: { subject: { level: currentLevel, type: "kanji" }, srs_stage: { gte: 5 } },
     }),
   ]);
-
-  const radicalsGuru = radicals.filter((r) => (r.progress?.srs_stage ?? 0) >= 5).length;
-  const kanjiGuru = kanji.filter((k) => (k.progress?.srs_stage ?? 0) >= 5).length;
 
   const dist = { apprentice: 0, guru: 0, master: 0, enlightened: 0, burned: 0 };
   for (const row of stageCounts) {
@@ -73,12 +70,12 @@ async function getDashboardData() {
   }
 
   return {
-    dueCount: dueReviews.length,
+    dueCount,
     lessonCount,
     currentLevel,
-    radicals,
+    radicalTotal,
     radicalsGuru,
-    kanji,
+    kanjiTotal,
     kanjiGuru,
     dist,
     settings,
@@ -90,12 +87,12 @@ async function getDashboardData() {
 
 export default async function Dashboard() {
   const {
-    dueCount, lessonCount, currentLevel, radicals, radicalsGuru,
-    kanji, kanjiGuru, dist, settings, forecast, heatmap, streak,
+    dueCount, lessonCount, currentLevel, radicalTotal, radicalsGuru,
+    kanjiTotal, kanjiGuru, dist, settings, forecast, heatmap, streak,
   } = await getDashboardData();
 
-  const radicalPct = radicals.length ? Math.round((radicalsGuru / radicals.length) * 100) : 0;
-  const kanjiPct = kanji.length ? Math.round((kanjiGuru / kanji.length) * 100) : 0;
+  const radicalPct = radicalTotal ? Math.round((radicalsGuru / radicalTotal) * 100) : 0;
+  const kanjiPct = kanjiTotal ? Math.round((kanjiGuru / kanjiTotal) * 100) : 0;
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -108,6 +105,22 @@ export default async function Dashboard() {
             Vacation mode is active — reviews are frozen. Press <kbd className="bg-yellow/20 px-1 rounded">V</kbd> or use the header button to disable.
           </div>
         )}
+
+        <div className="flex items-center gap-4 p-5 bg-mantle border border-surface0 rounded-xl">
+          <span className="text-5xl leading-none select-none">🦀</span>
+          <div>
+            <div className="font-semibold text-text text-lg">
+              {dueCount > 0
+                ? `${dueCount} review${dueCount === 1 ? "" : "s"} waiting`
+                : lessonCount > 0
+                ? `${lessonCount} new lesson${lessonCount === 1 ? "" : "s"} available`
+                : streak > 0
+                ? `${streak}-day streak — all caught up!`
+                : "All caught up!"}
+            </div>
+            <div className="text-sm text-subtext">Level {currentLevel} · KaniLocal</div>
+          </div>
+        </div>
 
         <div className="grid grid-cols-2 gap-4">
           <Link
@@ -142,7 +155,7 @@ export default async function Dashboard() {
             <div>
               <div className="flex justify-between text-sm mb-1">
                 <span className="text-blue">Radicals</span>
-                <span className="text-subtext">{radicalsGuru}/{radicals.length} Guru</span>
+                <span className="text-subtext">{radicalsGuru}/{radicalTotal} Guru</span>
               </div>
               <div className="h-2 bg-surface0 rounded-full overflow-hidden">
                 <div className="h-full bg-blue rounded-full transition-all" style={{ width: `${radicalPct}%` }} />
@@ -151,7 +164,7 @@ export default async function Dashboard() {
             <div>
               <div className="flex justify-between text-sm mb-1">
                 <span className="text-mauve">Kanji</span>
-                <span className="text-subtext">{kanjiGuru}/{kanji.length} Guru (need 90%)</span>
+                <span className="text-subtext">{kanjiGuru}/{kanjiTotal} Guru (need 90%)</span>
               </div>
               <div className="h-2 bg-surface0 rounded-full overflow-hidden">
                 <div className="h-full bg-mauve rounded-full transition-all" style={{ width: `${kanjiPct}%` }} />

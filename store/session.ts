@@ -16,6 +16,7 @@ export interface ReviewSubject {
   meaningMnemonic: string | null;
   readingMnemonic: string | null;
   srsStage: number;
+  components: { id: string; characters: string | null; meanings: string[] }[];
 }
 
 interface QueueItem {
@@ -69,18 +70,29 @@ const defaultItemState = (): ItemState => ({
   everWrong: false,
 });
 
-function buildInitialQueue(subjects: ReviewSubject[]): QueueItem[] {
-  const queue: QueueItem[] = [];
-  for (const s of subjects) {
-    queue.push({ subjectId: s.id, promptType: "meaning" });
-    if (s.type !== "radical") {
-      queue.push({ subjectId: s.id, promptType: "reading" });
-    }
-  }
-  // Shuffle
-  for (let i = queue.length - 1; i > 0; i--) {
+function shuffle<T>(arr: T[]): T[] {
+  for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [queue[i], queue[j]] = [queue[j], queue[i]];
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function buildInitialQueue(subjects: ReviewSubject[]): QueueItem[] {
+  const meanings: QueueItem[] = shuffle(
+    subjects.map(s => ({ subjectId: s.id, promptType: "meaning" as const }))
+  );
+  const readings: QueueItem[] = shuffle(
+    subjects
+      .filter(s => s.type !== "radical")
+      .map(s => ({ subjectId: s.id, promptType: "reading" as const }))
+  );
+
+  // Insert each reading at a random position so they're spread throughout,
+  // not clustered at the end as a plain Fisher-Yates can produce.
+  const queue = [...meanings];
+  for (const r of readings) {
+    queue.splice(Math.floor(Math.random() * (queue.length + 1)), 0, r);
   }
   return queue;
 }
