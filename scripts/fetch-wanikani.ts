@@ -79,13 +79,17 @@ async function main() {
       .sort((a: any, b: any) => (b.primary ? 1 : 0) - (a.primary ? 1 : 0))
       .map((r: any) => r.reading);
 
-    const vocabReadings = (d.readings ?? [])
-      .filter((r: any) => r.type === "onyomi" || r.type === "kunyomi" || r.type === "reading")
-      .sort((a: any, b: any) => (b.primary ? 1 : 0) - (a.primary ? 1 : 0))
-      .map((r: any) => r.reading);
+    // Vocabulary reading objects carry no `type` field (only kanji do), so take
+    // them all. kana_vocabulary has no readings — the kana characters are the reading.
+    const vocabReadings: string[] = type === "kana_vocabulary"
+      ? (characters ? [characters] : [])
+      : (d.readings ?? [])
+          .sort((a: any, b: any) => (b.primary ? 1 : 0) - (a.primary ? 1 : 0))
+          .map((r: any) => r.reading);
 
     const primaryReading =
-      (d.readings ?? []).find((r: any) => r.primary)?.reading ?? "";
+      (d.readings ?? []).find((r: any) => r.primary)?.reading ??
+      (type === "kana_vocabulary" ? characters : "");
 
     // Component IDs → app-style IDs (only the parts that make up this subject, not what it's used in)
     const componentIds: string[] = (d.component_subject_ids ?? []).map((cid: number) => {
