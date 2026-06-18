@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getSettings } from "@/lib/actions/settings";
 import { VacationToggle } from "./VacationToggle";
+import { CatchUpToggle } from "./CatchUpToggle";
 
 export async function Header() {
   const settings = await getSettings();
@@ -26,6 +27,7 @@ export async function Header() {
             Vacation
           </span>
         )}
+        <CatchUpToggle active={!!settings.review_freeze_at} />
         <VacationToggle active={settings.vacation_mode} />
       </div>
     </header>

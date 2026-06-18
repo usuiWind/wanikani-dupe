@@ -150,8 +150,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         itemSt.everWrong = true;
       }
 
-      if (promptType === "meaning") itemSt.meaningAnswered = true;
-      else itemSt.readingAnswered = true;
+      if (correct) {
+        if (promptType === "meaning") itemSt.meaningAnswered = true;
+        else itemSt.readingAnswered = true;
+      }
 
       const subject = state.subjects[subjectId];
       const needsReading = subject.type !== "radical";
@@ -167,7 +169,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         newQueue.splice(insertAt, 0, { subjectId, promptType });
       }
 
-      const newCompleted = fullyAnswered
+      const newCompleted = fullyAnswered && !state.completed.includes(subjectId)
         ? [...state.completed, subjectId]
         : state.completed;
 

@@ -122,6 +122,7 @@ model Settings {
   flashcard_default   Boolean   @default(false)
   vacation_mode       Boolean   @default(false)
   vacation_started_at DateTime?
+  review_freeze_at    DateTime?
   theme               String    @default("breeze-dark")
   answer_strictness   String    @default("normal")
   accept_all_readings Boolean   @default(true)

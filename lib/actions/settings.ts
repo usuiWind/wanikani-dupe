@@ -31,6 +31,22 @@ export async function updateSettings(data: {
   revalidatePath("/");
 }
 
+export async function toggleCatchUpMode() {
+  const settings = await prisma.settings.upsert({
+    where: { id: 1 },
+    update: {},
+    create: { id: 1 },
+  });
+
+  await prisma.settings.update({
+    where: { id: 1 },
+    data: { review_freeze_at: settings.review_freeze_at ? null : new Date() },
+  });
+
+  revalidatePath("/");
+  revalidatePath("/settings");
+}
+
 export async function toggleVacationMode() {
   const settings = await prisma.settings.upsert({
     where: { id: 1 },
@@ -46,17 +62,11 @@ export async function toggleVacationMode() {
       : 0;
 
     if (elapsed > 0) {
-      const pending = await prisma.studyProgress.findMany({
-        where: { next_review_at: { not: null }, srs_stage: { gte: 1, lte: 8 } },
-      });
-
-      for (const p of pending) {
-        if (!p.next_review_at) continue;
-        await prisma.studyProgress.update({
-          where: { subject_id: p.subject_id },
-          data: { next_review_at: new Date(p.next_review_at.getTime() + elapsed) },
-        });
-      }
+      await prisma.$executeRaw`
+        UPDATE "StudyProgress"
+        SET next_review_at = next_review_at + (${elapsed} * interval '1 millisecond')
+        WHERE next_review_at IS NOT NULL AND srs_stage >= 1 AND srs_stage <= 8
+      `;
     }
 
     await prisma.settings.update({

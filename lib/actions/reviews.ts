@@ -8,20 +8,22 @@ import { revalidatePath } from "next/cache";
 export async function getDueReviewCount(): Promise<number> {
   const settings = await prisma.settings.findUnique({ where: { id: 1 } });
   if (settings?.vacation_mode) return 0;
+  const cutoff = settings?.review_freeze_at ?? new Date();
   return prisma.studyProgress.count({
-    where: { srs_stage: { gte: 1, lte: 8 }, next_review_at: { lte: new Date() } },
+    where: { srs_stage: { gte: 1, lte: 8 }, next_review_at: { lte: cutoff } },
   });
 }
 
 export async function getDueReviews() {
   const settings = await prisma.settings.findUnique({ where: { id: 1 } });
   if (settings?.vacation_mode) return [];
+  const cutoff = settings?.review_freeze_at ?? new Date();
 
   return prisma.subject.findMany({
     where: {
       progress: {
         srs_stage: { gte: 1, lte: 8 },
-        next_review_at: { lte: new Date() },
+        next_review_at: { lte: cutoff },
       },
     },
     include: {
