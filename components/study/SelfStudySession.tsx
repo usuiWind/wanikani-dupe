@@ -45,6 +45,13 @@ export function SelfStudySession({ subjects, filterLabel }: { subjects: any[]; f
     return () => window.removeEventListener("keydown", onKey);
   }, [store]);
 
+  const totalCount = Object.keys(store.subjects).length;
+  const completedCount = Object.values(store.subjects).filter((s) => {
+    const st = store.itemState[s.id];
+    return !!st && st.meaningAnswered && (s.type === "radical" || st.readingAnswered);
+  }).length;
+  const correctPct = store.history.length === 0 ? 100
+    : Math.round(store.history.filter(h => h.correct).length / store.history.length * 100);
   const queueEmpty = store.queue.length === 0;
 
   if (queueEmpty) {
@@ -52,7 +59,7 @@ export function SelfStudySession({ subjects, filterLabel }: { subjects: any[]; f
       <main className="flex-1 flex flex-col items-center justify-center gap-6 px-4 text-center">
         <div className="text-6xl">✅</div>
         <h1 className="text-2xl font-semibold text-text">Done!</h1>
-        <p className="text-subtext">{store.completedCount()} items · {store.correctPercent()}% correct</p>
+        <p className="text-subtext">{completedCount} items · {correctPct}% correct</p>
         <p className="text-xs text-subtext">Self-study results are not saved to SRS.</p>
         <button
           onClick={() => router.push("/")}
@@ -69,13 +76,13 @@ export function SelfStudySession({ subjects, filterLabel }: { subjects: any[]; f
       <div className="h-1 bg-surface0">
         <div
           className="h-full bg-blue transition-all"
-          style={{ width: `${store.totalCount() > 0 ? (store.completedCount() / store.totalCount()) * 100 : 0}%` }}
+          style={{ width: `${totalCount > 0 ? (completedCount / totalCount) * 100 : 0}%` }}
         />
       </div>
       <div className="flex justify-between px-4 py-2 text-sm text-subtext bg-mantle border-b border-surface0">
         <span className="text-xs text-yellow">Self Study — not saved to SRS</span>
         <div className="flex items-center gap-3">
-          <span>{store.correctPercent()}% correct</span>
+          <span>{correctPct}% correct</span>
           <button
             onClick={store.toggleFlashcard}
             className={`text-xs px-2 py-0.5 rounded border transition-colors ${store.flashcardMode ? "border-mauve text-mauve" : "border-surface1 text-subtext hover:border-mauve"}`}
@@ -83,7 +90,7 @@ export function SelfStudySession({ subjects, filterLabel }: { subjects: any[]; f
             {store.flashcardMode ? "Flashcard ✓" : "Flashcard"}
           </button>
         </div>
-        <span>{store.completedCount()}/{store.totalCount()} done</span>
+        <span>{completedCount}/{totalCount} done</span>
       </div>
       <div className="flex-1 flex flex-col items-center justify-center px-4 py-8">
         {store.flashcardMode ? <FlashCard /> : <TypedReviewCard selfStudy />}

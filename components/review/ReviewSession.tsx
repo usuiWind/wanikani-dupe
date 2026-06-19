@@ -43,7 +43,10 @@ export function ReviewSession({ subjects, acceptAllReadings = true }: Props) {
   }, [store]);
 
   const totalCount = Object.keys(store.subjects).length;
-  const completedCount = store.completed.length;
+  const completedCount = Object.values(store.subjects).filter((s) => {
+    const st = store.itemState[s.id];
+    return !!st && st.meaningAnswered && (s.type === "radical" || st.readingAnswered);
+  }).length;
   const correctPct = store.history.length === 0 ? 100
     : Math.round(store.history.filter(h => h.correct).length / store.history.length * 100);
   const queueEmpty = store.queue.length === 0;
