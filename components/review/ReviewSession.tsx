@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useCallback } from "react";
+import { useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useSessionStore, ReviewSubject } from "@/store/session";
-import { submitReviewResults } from "@/lib/actions/reviews";
+import { saveReviewItem, finalizeReviewSession } from "@/lib/actions/reviews";
 import { TypedReviewCard } from "./TypedReviewCard";
 import { FlashCard } from "./FlashCard";
 import { HistoryCard } from "./HistoryCard";
@@ -22,16 +22,47 @@ export function ReviewSession({ subjects, acceptAllReadings = true }: Props) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleComplete = useCallback(async () => {
-    const results = Object.entries(store.itemState).map(([subjectId, state]) => ({
+  // Items already persisted to the DB this session, so we never double-save.
+  const savedRef = useRef<Set<string>>(new Set());
+  // Serialize saves so concurrent flushes can't race on shared rows.
+  const flushChain = useRef<Promise<void>>(Promise.resolve());
+
+  const flushItem = useCallback((subjectId: string) => {
+    if (savedRef.current.has(subjectId)) return;
+    const st = store.itemState[subjectId];
+    if (!st) return;
+    savedRef.current.add(subjectId);
+    const payload = {
       subjectId,
-      incorrectMeaningCount: state.incorrectMeaningCount,
-      incorrectReadingCount: state.incorrectReadingCount,
-    }));
-    await submitReviewResults(results);
+      incorrectMeaningCount: st.incorrectMeaningCount,
+      incorrectReadingCount: st.incorrectReadingCount,
+    };
+    flushChain.current = flushChain.current
+      .then(() => saveReviewItem(payload))
+      .catch((err) => {
+        // Allow a later retry (on end-session) if this save failed.
+        savedRef.current.delete(subjectId);
+        console.error("Failed to save review item", subjectId, err);
+      });
+  }, [store.itemState]);
+
+  // Persist each completed item once it's "locked in" — i.e. no longer the
+  // undoable last answer — so an undo can never contradict a saved row.
+  useEffect(() => {
+    const undoable = store.pendingUndo?.subjectId ?? null;
+    for (const id of store.completed) {
+      if (id !== undoable) flushItem(id);
+    }
+  }, [store.completed, store.pendingUndo, flushItem]);
+
+  const endSession = useCallback(async () => {
+    // Flush any remaining completed items (including the last undoable one).
+    for (const id of store.completed) flushItem(id);
+    await flushChain.current;
+    await finalizeReviewSession();
     router.push("/");
     router.refresh();
-  }, [store.itemState, router]);
+  }, [store.completed, flushItem, router]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -60,7 +91,7 @@ export function ReviewSession({ subjects, acceptAllReadings = true }: Props) {
           {completedCount} items reviewed · {correctPct}% correct
         </p>
         <button
-          onClick={handleComplete}
+          onClick={endSession}
           className="px-6 py-3 bg-blue text-crust rounded-lg font-semibold hover:opacity-90 transition-opacity"
         >
           Save and finish
@@ -97,6 +128,12 @@ export function ReviewSession({ subjects, acceptAllReadings = true }: Props) {
             }`}
           >
             {store.flashcardMode ? "Flashcard ✓" : "Flashcard"}
+          </button>
+          <button
+            onClick={endSession}
+            className="text-xs px-2 py-0.5 rounded border border-surface1 text-subtext hover:border-red hover:text-red transition-colors"
+          >
+            End session
           </button>
         </div>
         <span>{completedCount}/{totalCount} done</span>

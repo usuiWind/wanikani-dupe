@@ -40,67 +40,77 @@ export async function getDueReviews() {
   });
 }
 
-export async function submitReviewResults(
-  results: Array<{
-    subjectId: string;
-    incorrectMeaningCount: number;
-    incorrectReadingCount: number;
-  }>
-) {
-  const now = new Date();
-  let correct = 0;
-  let incorrect = 0;
+type ReviewResult = {
+  subjectId: string;
+  incorrectMeaningCount: number;
+  incorrectReadingCount: number;
+};
 
-  for (const result of results) {
-    const progress = await prisma.studyProgress.findUnique({
-      where: { subject_id: result.subjectId },
-      include: { subject: { select: { level: true } } },
-    });
+// Persist a single fully-answered item. Kept cheap (no checkLevelUp/revalidate)
+// so it can be called incrementally as each item is completed during a session.
+async function applyReviewResult(result: ReviewResult, now: Date) {
+  const progress = await prisma.studyProgress.findUnique({
+    where: { subject_id: result.subjectId },
+    include: { subject: { select: { level: true } } },
+  });
 
-    if (!progress || !progress.srs_stage) continue;
+  if (!progress || !progress.srs_stage) return;
 
-    const totalIncorrect = result.incorrectMeaningCount + result.incorrectReadingCount;
-    const newStage = computeNextStage(progress.srs_stage, totalIncorrect);
-    const nextReview = scheduleNextReview(newStage, progress.subject.level, now);
+  const totalIncorrect = result.incorrectMeaningCount + result.incorrectReadingCount;
+  const newStage = computeNextStage(progress.srs_stage, totalIncorrect);
+  const nextReview = scheduleNextReview(newStage, progress.subject.level, now);
 
-    const newTotalCorrect = progress.total_correct + (totalIncorrect === 0 ? 1 : 0);
-    const newTotalIncorrect = progress.total_incorrect + (totalIncorrect > 0 ? 1 : 0);
-    const leechScore = computeLeechScore(newTotalIncorrect, newStage);
+  const newTotalCorrect = progress.total_correct + (totalIncorrect === 0 ? 1 : 0);
+  const newTotalIncorrect = progress.total_incorrect + (totalIncorrect > 0 ? 1 : 0);
+  const leechScore = computeLeechScore(newTotalIncorrect, newStage);
 
-    await prisma.studyProgress.update({
-      where: { subject_id: result.subjectId },
-      data: {
-        srs_stage: newStage,
-        next_review_at: nextReview,
-        passed_at: newStage >= 5 && !progress.passed_at ? now : progress.passed_at,
-        burned_at: newStage === 9 ? now : progress.burned_at,
-        total_correct: newTotalCorrect,
-        total_incorrect: newTotalIncorrect,
-        leech_score: leechScore,
-        last_reviewed_at: now,
-      },
-    });
+  await prisma.studyProgress.update({
+    where: { subject_id: result.subjectId },
+    data: {
+      srs_stage: newStage,
+      next_review_at: nextReview,
+      passed_at: newStage >= 5 && !progress.passed_at ? now : progress.passed_at,
+      burned_at: newStage === 9 ? now : progress.burned_at,
+      total_correct: newTotalCorrect,
+      total_incorrect: newTotalIncorrect,
+      leech_score: leechScore,
+      last_reviewed_at: now,
+    },
+  });
 
-    await prisma.reviewsLog.create({
-      data: {
-        subject_id: result.subjectId,
-        started_at: now,
-        ended_at: now,
-        incorrect_meaning_count: result.incorrectMeaningCount,
-        incorrect_reading_count: result.incorrectReadingCount,
-        resulting_stage: newStage,
-      },
-    });
+  await prisma.reviewsLog.create({
+    data: {
+      subject_id: result.subjectId,
+      started_at: now,
+      ended_at: now,
+      incorrect_meaning_count: result.incorrectMeaningCount,
+      incorrect_reading_count: result.incorrectReadingCount,
+      resulting_stage: newStage,
+    },
+  });
 
-    if (totalIncorrect === 0) correct++; else incorrect++;
+  await incrementDailyActivity(
+    now,
+    1,
+    0,
+    totalIncorrect === 0 ? 1 : 0,
+    totalIncorrect > 0 ? 1 : 0
+  );
 
-    if (newStage >= 5) {
-      await unlockDependents(result.subjectId, now);
-    }
+  if (newStage >= 5) {
+    await unlockDependents(result.subjectId, now);
   }
+}
 
-  await checkLevelUp(now);
-  await incrementDailyActivity(now, results.length, 0, correct, incorrect);
+// Save one completed review item immediately. Called per item during a session
+// so progress survives leaving/refreshing before the session is finished.
+export async function saveReviewItem(result: ReviewResult) {
+  await applyReviewResult(result, new Date());
+}
+
+// Run once when a session ends: level-up check + dashboard revalidation.
+export async function finalizeReviewSession() {
+  await checkLevelUp(new Date());
   revalidatePath("/");
 }
 
