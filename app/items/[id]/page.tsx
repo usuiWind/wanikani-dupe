@@ -43,7 +43,7 @@ export default async function ItemDetail({ params }: { params: Promise<{ id: str
 
         {/* Header */}
         <div className="flex items-center gap-6">
-          <SubjectBadge type={subject.type as "radical" | "kanji" | "vocabulary"} characters={subject.characters} size="lg" />
+          <SubjectBadge type={subject.type as "radical" | "kanji" | "vocabulary"} characters={subject.characters} imageUrl={subject.image_url} size="lg" />
           <div>
             <div className="text-sm text-subtext capitalize">{subject.type} · Level {subject.level}</div>
             <div className="mt-1">

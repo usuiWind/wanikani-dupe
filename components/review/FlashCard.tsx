@@ -41,7 +41,7 @@ export function FlashCard() {
   return (
     <div className="w-full max-w-xl space-y-6">
       <div className="flex flex-col items-center gap-3">
-        <SubjectBadge type={subject.type} characters={subject.characters} size="xl" />
+        <SubjectBadge type={subject.type} characters={subject.characters} imageUrl={subject.imageUrl} size="xl" />
         <SrsChip stage={subject.srsStage} />
       </div>
 
