@@ -38,10 +38,32 @@ export async function toggleCatchUpMode() {
     create: { id: 1 },
   });
 
-  await prisma.settings.update({
-    where: { id: 1 },
-    data: { review_freeze_at: settings.review_freeze_at ? null : new Date() },
-  });
+  const now = new Date();
+
+  if (settings.review_freeze_at) {
+    // Disabling: shift every scheduled review forward by the paused duration so
+    // the backlog you cleared returns on its normal spacing, not all at once.
+    const elapsed = now.getTime() - settings.review_freeze_at.getTime();
+
+    if (elapsed > 0) {
+      await prisma.$executeRaw`
+        UPDATE "StudyProgress"
+        SET next_review_at = next_review_at + (${elapsed} * interval '1 millisecond')
+        WHERE next_review_at IS NOT NULL AND srs_stage >= 1 AND srs_stage <= 8
+      `;
+    }
+
+    await prisma.settings.update({
+      where: { id: 1 },
+      data: { review_freeze_at: null },
+    });
+  } else {
+    // Enabling: freeze the due cutoff at now — nothing new becomes due until off.
+    await prisma.settings.update({
+      where: { id: 1 },
+      data: { review_freeze_at: now },
+    });
+  }
 
   revalidatePath("/");
   revalidatePath("/settings");

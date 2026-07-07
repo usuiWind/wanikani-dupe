@@ -12,6 +12,8 @@ export interface ReviewSubject {
   imageUrl: string | null;
   meanings: string[];
   readings: string[];
+  onyomi?: string[];
+  kunyomi?: string[];
   primaryReading: string | null;
   meaningMnemonic: string | null;
   readingMnemonic: string | null;

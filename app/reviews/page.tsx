@@ -29,6 +29,8 @@ export default async function ReviewsPage() {
     imageUrl: s.image_url,
     meanings: s.meanings.map((m) => m.text),
     readings: s.readings.map((r) => r.text),
+    onyomi: s.readings.filter((r) => r.reading_type === "onyomi").map((r) => r.text),
+    kunyomi: s.readings.filter((r) => r.reading_type === "kunyomi").map((r) => r.text),
     primaryReading: s.primary_reading,
     meaningMnemonic: s.mnemonic?.meaning_mnemonic ?? null,
     readingMnemonic: s.mnemonic?.reading_mnemonic ?? null,

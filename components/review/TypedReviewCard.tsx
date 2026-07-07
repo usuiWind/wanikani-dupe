@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useSessionStore } from "@/store/session";
 import { SubjectBadge } from "@/components/shared/SubjectBadge";
 import { SrsChip } from "@/components/shared/SrsChip";
+import { Mnemonic } from "@/components/shared/Mnemonic";
 import * as wanakana from "wanakana";
 
 type AnswerState = "idle" | "correct" | "wrong";
@@ -19,7 +20,6 @@ export function TypedReviewCard({
   const current = store.currentItem();
   const [answer, setAnswer] = useState("");
   const [answerState, setAnswerState] = useState<AnswerState>("idle");
-  const [showInfo, setShowInfo] = useState(false);
   const [showClearHint, setShowClearHint] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const isBound = useRef(false);
@@ -29,7 +29,6 @@ export function TypedReviewCard({
   useEffect(() => {
     setAnswer("");
     setAnswerState("idle");
-    setShowInfo(false);
     setTimeout(() => inputRef.current?.focus(), 50);
   }, [current?.subject.id, current?.promptType]);
 
@@ -91,7 +90,6 @@ export function TypedReviewCard({
     }
 
     setAnswerState(correct ? "correct" : "wrong");
-    setShowInfo(!correct);
   }, [current, answer, answerState, acceptAllReadings]);
 
   const handleNext = useCallback(
@@ -101,7 +99,6 @@ export function TypedReviewCard({
       store.submitAnswer(current.subject.id, current.promptType, answer, isCorrect);
       setAnswer("");
       setAnswerState("idle");
-      setShowInfo(false);
     },
     [current, answerState, answer, store]
   );
@@ -110,7 +107,6 @@ export function TypedReviewCard({
     store.undoLast();
     setAnswer("");
     setAnswerState("idle");
-    setShowInfo(false);
   }, [store]);
 
   useEffect(() => {
@@ -131,7 +127,6 @@ export function TypedReviewCard({
           setShowClearHint(false);
           setAnswer("");
           setAnswerState("idle");
-          setShowInfo(false);
         } else {
           clearHintRef.current = true;
           setShowClearHint(true);
@@ -245,21 +240,47 @@ export function TypedReviewCard({
         )}
       </div>
 
-      <div>
-        <button
-          onClick={() => setShowInfo(!showInfo)}
-          className="w-full text-sm text-subtext hover:text-text transition-colors text-left"
-        >
-          {showInfo ? "▼" : "▶"} {promptType === "meaning" ? "Meaning mnemonic" : "Reading mnemonic"}
-        </button>
-        {showInfo && (
-          <div className="mt-2 p-3 bg-surface0 rounded-lg text-sm text-text">
-            {promptType === "meaning"
-              ? (subject.meaningMnemonic ?? "No mnemonic.")
-              : (subject.readingMnemonic ?? "No mnemonic.")}
+      {answerState !== "idle" && (
+        <div className="p-4 bg-surface0 rounded-lg space-y-3 text-sm">
+          <div>
+            <div className="text-xs text-subtext mb-1">Meanings</div>
+            <div className="text-text">{subject.meanings.join(", ")}</div>
           </div>
-        )}
-      </div>
+
+          {subject.type === "kanji" ? (
+            <div className="flex gap-8">
+              {(subject.onyomi ?? []).length > 0 && (
+                <div>
+                  <div className="text-xs text-subtext mb-1">On&apos;yomi</div>
+                  <div className="text-text" lang="ja">{(subject.onyomi ?? []).join("、")}</div>
+                </div>
+              )}
+              {(subject.kunyomi ?? []).length > 0 && (
+                <div>
+                  <div className="text-xs text-subtext mb-1">Kun&apos;yomi</div>
+                  <div className="text-text" lang="ja">{(subject.kunyomi ?? []).join("、")}</div>
+                </div>
+              )}
+            </div>
+          ) : subject.type === "vocabulary" && subject.readings.length > 0 ? (
+            <div>
+              <div className="text-xs text-subtext mb-1">Reading</div>
+              <div className="text-text" lang="ja">{subject.readings.join("、")}</div>
+            </div>
+          ) : null}
+
+          <div>
+            <div className="text-xs text-subtext mb-1">Meaning mnemonic</div>
+            <div className="text-text leading-relaxed"><Mnemonic text={subject.meaningMnemonic} /></div>
+          </div>
+          {subject.type !== "radical" && (
+            <div>
+              <div className="text-xs text-subtext mb-1">Reading mnemonic</div>
+              <div className="text-text leading-relaxed"><Mnemonic text={subject.readingMnemonic} /></div>
+            </div>
+          )}
+        </div>
+      )}
 
       {(itemState.incorrectMeaningCount > 0 || itemState.incorrectReadingCount > 0) && (
         <div className="text-center text-xs text-red">

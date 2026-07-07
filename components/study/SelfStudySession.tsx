@@ -15,6 +15,8 @@ function toReviewSubject(s: any): ReviewSubject {
     imageUrl: s.image_url ?? null,
     meanings: s.meanings.map((m: any) => m.text),
     readings: s.readings.map((r: any) => r.text),
+    onyomi: s.readings.filter((r: any) => r.reading_type === "onyomi").map((r: any) => r.text),
+    kunyomi: s.readings.filter((r: any) => r.reading_type === "kunyomi").map((r: any) => r.text),
     primaryReading: s.primary_reading,
     meaningMnemonic: s.mnemonic?.meaning_mnemonic ?? null,
     readingMnemonic: s.mnemonic?.reading_mnemonic ?? null,

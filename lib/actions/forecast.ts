@@ -14,6 +14,12 @@ export async function getReviewForecast() {
   const in48h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
   const in7d = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
 
+  // Catch-up mode freezes the due cutoff: hide anything that becomes due after
+  // the freeze so the forecast stays flat instead of showing a growing pile.
+  const settings = await prisma.settings.findUnique({ where: { id: 1 } });
+  const frozen = settings?.review_freeze_at ?? null;
+  const cutoff = frozen ?? now;
+
   // Find current level
   const latestProgress = await prisma.studyProgress.findFirst({
     where: { started_at: { not: null }, srs_stage: { gte: 1, lte: 8 } },
@@ -22,17 +28,19 @@ export async function getReviewForecast() {
   });
   const currentLevel = latestProgress?.subject.level ?? 1;
 
-  const upcoming = await prisma.studyProgress.findMany({
-    where: {
-      next_review_at: { gte: now, lte: in7d },
-      srs_stage: { gte: 1, lte: 8 },
-    },
-    select: {
-      next_review_at: true,
-      srs_stage: true,
-      subject: { select: { level: true } },
-    },
-  });
+  const upcoming = frozen
+    ? []
+    : await prisma.studyProgress.findMany({
+        where: {
+          next_review_at: { gte: now, lte: in7d },
+          srs_stage: { gte: 1, lte: 8 },
+        },
+        select: {
+          next_review_at: true,
+          srs_stage: true,
+          subject: { select: { level: true } },
+        },
+      });
 
   // Build hourly buckets for next 24h
   const hourlyBuckets: ForecastBucket[] = Array.from({ length: 24 }, (_, i) => {
@@ -73,9 +81,9 @@ export async function getReviewForecast() {
     }
   }
 
-  // Also include currently due items in "Now" bucket
+  // Also include currently due items in "Now" bucket (frozen backlog if catch-up on)
   const dueNow = await prisma.studyProgress.count({
-    where: { next_review_at: { lte: now }, srs_stage: { gte: 1, lte: 8 } },
+    where: { next_review_at: { lte: cutoff }, srs_stage: { gte: 1, lte: 8 } },
   });
   if (hourlyBuckets[0]) hourlyBuckets[0].count += dueNow;
   if (dailyBuckets[0]) dailyBuckets[0].count += dueNow;
