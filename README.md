@@ -18,6 +18,31 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
+## Database Setup
+
+1. Copy `.env.example` to `.env` and fill in your Supabase `DATABASE_URL`/`DIRECT_URL`.
+2. Push the Prisma schema to the database:
+   ```bash
+   npx prisma db push
+   ```
+3. Fetch the WaniKani subject dataset (requires a WaniKani API token, and a paid
+   subscription for full subject data). Writes `wanikani-subjects.csv`:
+   ```bash
+   npx tsx scripts/fetch-wanikani.ts <wanikani-api-token>
+   ```
+4. Import the CSV into the `Subject` table:
+   ```bash
+   npx tsx scripts/import-csv.ts
+   ```
+5. Import your personal SRS progress from WaniKani into `StudyProgress`:
+   ```bash
+   npx tsx scripts/import-assignments.ts <wanikani-api-token>
+   ```
+
+⚠️ **Re-running `import-csv.ts` truncates `Subject` and cascades to all imported
+progress** (`StudyProgress`, `ReviewsLog`, etc.) — see [MAINTENANCE.md](./MAINTENANCE.md)
+before re-running it on a database that already has progress data.
+
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Learn More
