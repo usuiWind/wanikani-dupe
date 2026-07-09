@@ -16,7 +16,7 @@ export async function Header() {
         <Link href="/lessons" className="hover:text-text transition-colors">Lessons</Link>
         <Link href="/reviews" className="hover:text-text transition-colors">Reviews</Link>
         <Link href="/levels" className="hover:text-text transition-colors">Levels</Link>
-        <Link href="/study?type=leeches" className="hover:text-text transition-colors">Study</Link>
+        <Link href="/study" className="hover:text-text transition-colors">Study</Link>
         <Link href="/leeches" className="hover:text-text transition-colors">Leeches</Link>
         <Link href="/settings" className="hover:text-text transition-colors">Settings</Link>
       </nav>
