@@ -80,6 +80,22 @@ function shuffle<T>(arr: T[]): T[] {
   return arr;
 }
 
+// A subject's reading follows its meaning within this many slots, so you can
+// finish (vanquish) a card in one span instead of meeting its two halves
+// hundreds of prompts apart in a large batch. Not adjacent (min gap) so it
+// isn't rote pattern-matching. ponytail: fixed window; make it a Settings knob
+// if users want to tune recall spacing.
+const PAIR_MIN_GAP = 2;
+const PAIR_MAX_GAP = 7;
+// A missed prompt returns within this many prompts — near enough to relearn
+// while fresh, not buried at a random spot in a 400-card queue.
+const REQUEUE_MIN_GAP = 3;
+const REQUEUE_MAX_GAP = 9;
+
+function boundedOffset(min: number, max: number): number {
+  return min + Math.floor(Math.random() * (max - min + 1));
+}
+
 function buildInitialQueue(subjects: ReviewSubject[]): QueueItem[] {
   const meanings: QueueItem[] = shuffle(
     subjects.map(s => ({ subjectId: s.id, promptType: "meaning" as const }))
@@ -90,11 +106,15 @@ function buildInitialQueue(subjects: ReviewSubject[]): QueueItem[] {
       .map(s => ({ subjectId: s.id, promptType: "reading" as const }))
   );
 
-  // Insert each reading at a random position so they're spread throughout,
-  // not clustered at the end as a plain Fisher-Yates can produce.
+  // Place each reading a short, semi-random distance after its own meaning so
+  // the pair stays completable without being back-to-back.
   const queue = [...meanings];
   for (const r of readings) {
-    queue.splice(Math.floor(Math.random() * (queue.length + 1)), 0, r);
+    const meaningIdx = queue.findIndex(
+      q => q.subjectId === r.subjectId && q.promptType === "meaning"
+    );
+    const insertAt = Math.min(meaningIdx + boundedOffset(PAIR_MIN_GAP, PAIR_MAX_GAP), queue.length);
+    queue.splice(insertAt, 0, r);
   }
   return queue;
 }
@@ -165,9 +185,13 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       // Remove current prompt from queue
       const newQueue = state.queue.slice(1);
 
-      // If wrong, requeue this prompt at a random position in the remaining queue
+      // If wrong, requeue this prompt within a short, semi-random window so it
+      // comes back while still fresh instead of at a random spot in the batch.
       if (!correct) {
-        const insertAt = Math.floor(Math.random() * (newQueue.length + 1));
+        const insertAt = Math.min(
+          boundedOffset(REQUEUE_MIN_GAP, REQUEUE_MAX_GAP),
+          newQueue.length
+        );
         newQueue.splice(insertAt, 0, { subjectId, promptType });
       }
 
