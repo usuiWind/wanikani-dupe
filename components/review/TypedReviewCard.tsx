@@ -24,7 +24,7 @@ export function TypedReviewCard({
   const inputRef = useRef<HTMLInputElement>(null);
   const isBound = useRef(false);
   const clearHintRef = useRef(false);
-  const clearTimerRef = useRef<ReturnType<typeof setTimeout>>();
+  const clearTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   useEffect(() => {
     setAnswer("");

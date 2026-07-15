@@ -13,7 +13,7 @@ async function fetchAll(url: string): Promise<any[]> {
   const results: any[] = [];
   let next: string | null = url;
   while (next) {
-    const res = await fetch(next, { headers: HEADERS });
+    const res: Response = await fetch(next, { headers: HEADERS });
     if (!res.ok) throw new Error(`WaniKani API error ${res.status}: ${await res.text()}`);
     const body = await res.json();
     results.push(...body.data);
