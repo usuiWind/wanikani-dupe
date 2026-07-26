@@ -87,10 +87,11 @@ function shuffle<T>(arr: T[]): T[] {
 // if users want to tune recall spacing.
 const PAIR_MIN_GAP = 2;
 const PAIR_MAX_GAP = 7;
-// A missed prompt returns within this many prompts — near enough to relearn
-// while fresh, not buried at a random spot in a 400-card queue.
-const REQUEUE_MIN_GAP = 3;
-const REQUEUE_MAX_GAP = 9;
+// A missed prompt returns within this many prompts — far enough that you're
+// recalling it, not just echoing the answer you just saw, but not buried at a
+// random spot in a 400-card queue.
+const REQUEUE_MIN_GAP = 8;
+const REQUEUE_MAX_GAP = 20;
 
 function boundedOffset(min: number, max: number): number {
   return min + Math.floor(Math.random() * (max - min + 1));
