@@ -32,6 +32,10 @@ interface ItemState {
   meaningAnswered: boolean;
   readingAnswered: boolean;
   everWrong: boolean;
+  // A missed prompt gets exactly one end-of-session recheck; these guard
+  // against scheduling a second one.
+  meaningRechecked: boolean;
+  readingRechecked: boolean;
 }
 
 export interface HistoryEntry {
@@ -70,6 +74,8 @@ const defaultItemState = (): ItemState => ({
   meaningAnswered: false,
   readingAnswered: false,
   everWrong: false,
+  meaningRechecked: false,
+  readingRechecked: false,
 });
 
 function shuffle<T>(arr: T[]): T[] {
@@ -88,10 +94,12 @@ function shuffle<T>(arr: T[]): T[] {
 const PAIR_MIN_GAP = 2;
 const PAIR_MAX_GAP = 7;
 // A missed prompt returns within this many prompts — far enough that you're
-// recalling it, not just echoing the answer you just saw, but not buried at a
-// random spot in a 400-card queue.
-const REQUEUE_MIN_GAP = 8;
-const REQUEUE_MAX_GAP = 20;
+// genuinely recalling it, not echoing the answer you just saw, but not buried
+// at a random spot in a 400-card queue. In addition, every missed prompt gets
+// one final recheck appended to the very end of the session (Anki-style
+// relearning: a lucky mid-session recall still has to prove itself once more).
+const REQUEUE_MIN_GAP = 15;
+const REQUEUE_MAX_GAP = 40;
 
 function boundedOffset(min: number, max: number): number {
   return min + Math.floor(Math.random() * (max - min + 1));
@@ -186,14 +194,31 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       // Remove current prompt from queue
       const newQueue = state.queue.slice(1);
 
-      // If wrong, requeue this prompt within a short, semi-random window so it
-      // comes back while still fresh instead of at a random spot in the batch.
+      // If wrong, requeue this prompt within a semi-random window so it comes
+      // back far enough away that you have to recall it, not just echo the
+      // answer you were shown moments ago.
       if (!correct) {
         const insertAt = Math.min(
           boundedOffset(REQUEUE_MIN_GAP, REQUEUE_MAX_GAP),
           newQueue.length
         );
         newQueue.splice(insertAt, 0, { subjectId, promptType });
+      }
+
+      // If this prompt was missed earlier and is now finally correct, append
+      // one final recheck to the end of the session — but only once.
+      if (correct) {
+        const missedThis = promptType === "meaning"
+          ? itemSt.incorrectMeaningCount > 0
+          : itemSt.incorrectReadingCount > 0;
+        const alreadyScheduled = promptType === "meaning"
+          ? itemSt.meaningRechecked
+          : itemSt.readingRechecked;
+        if (missedThis && !alreadyScheduled) {
+          newQueue.push({ subjectId, promptType });
+          if (promptType === "meaning") itemSt.meaningRechecked = true;
+          else itemSt.readingRechecked = true;
+        }
       }
 
       const newCompleted = fullyAnswered && !state.completed.includes(subjectId)
@@ -223,12 +248,19 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       else itemSt.incorrectReadingCount = Math.max(0, itemSt.incorrectReadingCount - 1);
     }
 
-    if (promptType === "meaning") itemSt.meaningAnswered = false;
-    else itemSt.readingAnswered = false;
+    if (promptType === "meaning") {
+      itemSt.meaningAnswered = false;
+      itemSt.meaningRechecked = false;
+    } else {
+      itemSt.readingAnswered = false;
+      itemSt.readingRechecked = false;
+    }
 
-    // Put the prompt back at the front of the queue, remove any requeue of it
+    // Put the prompt back at the front of the queue. Drop every other copy of
+    // this exact prompt first — a mid-queue requeue (wrong) or the appended
+    // end-of-session recheck (correct) — so undo can't leave a duplicate.
     const filtered = queue.filter(
-      (q) => !(q.subjectId === subjectId && q.promptType === promptType && !correct)
+      (q) => !(q.subjectId === subjectId && q.promptType === promptType)
     );
     const newQueue = [{ subjectId, promptType }, ...filtered];
 
