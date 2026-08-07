@@ -86,46 +86,24 @@ function shuffle<T>(arr: T[]): T[] {
   return arr;
 }
 
-// A subject's reading follows its meaning within this many slots, so you can
-// finish (vanquish) a card in one span instead of meeting its two halves
-// hundreds of prompts apart in a large batch. Not adjacent (min gap) so it
-// isn't rote pattern-matching. ponytail: fixed window; make it a Settings knob
-// if users want to tune recall spacing.
-const PAIR_MIN_GAP = 2;
-const PAIR_MAX_GAP = 7;
-// A missed prompt returns within this many prompts — far enough that you're
-// genuinely recalling it, not echoing the answer you just saw, but not buried
-// at a random spot in a 400-card queue. In addition, every missed prompt gets
-// one final recheck appended to the very end of the session (Anki-style
-// relearning: a lucky mid-session recall still has to prove itself once more).
+// A missed prompt is requeued into the BACK PORTION of what's left, so as many
+// other cards as possible sit between you and its return. That interference is
+// what actually flushes the spelling you were just shown out of short-term
+// memory — a fixed small gap just lets you echo it back. Never nearer than this
+// floor (so it isn't the very next card in a tiny queue). On top of that, every
+// missed prompt gets one final recheck appended to the very end of the session.
 const REQUEUE_MIN_GAP = 15;
-const REQUEUE_MAX_GAP = 40;
-
-function boundedOffset(min: number, max: number): number {
-  return min + Math.floor(Math.random() * (max - min + 1));
-}
 
 function buildInitialQueue(subjects: ReviewSubject[]): QueueItem[] {
-  const meanings: QueueItem[] = shuffle(
-    subjects.map(s => ({ subjectId: s.id, promptType: "meaning" as const }))
-  );
-  const readings: QueueItem[] = shuffle(
-    subjects
-      .filter(s => s.type !== "radical")
-      .map(s => ({ subjectId: s.id, promptType: "reading" as const }))
-  );
-
-  // Place each reading a short, semi-random distance after its own meaning so
-  // the pair stays completable without being back-to-back.
-  const queue = [...meanings];
-  for (const r of readings) {
-    const meaningIdx = queue.findIndex(
-      q => q.subjectId === r.subjectId && q.promptType === "meaning"
-    );
-    const insertAt = Math.min(meaningIdx + boundedOffset(PAIR_MIN_GAP, PAIR_MAX_GAP), queue.length);
-    queue.splice(insertAt, 0, r);
+  // Fully interleave and shuffle every prompt (like WaniKani's review queue) so
+  // an item's meaning and reading land at independent random spots — you have
+  // to recall each one, not echo the half you just saw a few cards ago.
+  const prompts: QueueItem[] = [];
+  for (const s of subjects) {
+    prompts.push({ subjectId: s.id, promptType: "meaning" });
+    if (s.type !== "radical") prompts.push({ subjectId: s.id, promptType: "reading" });
   }
-  return queue;
+  return shuffle(prompts);
 }
 
 export const useSessionStore = create<SessionStore>((set, get) => ({
@@ -194,14 +172,13 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
       // Remove current prompt from queue
       const newQueue = state.queue.slice(1);
 
-      // If wrong, requeue this prompt within a semi-random window so it comes
-      // back far enough away that you have to recall it, not just echo the
-      // answer you were shown moments ago.
+      // If wrong, requeue this prompt into the back portion of the remaining
+      // queue (at least REQUEUE_MIN_GAP away), so lots of other cards intervene
+      // before you see it again and the just-shown spelling has faded.
       if (!correct) {
-        const insertAt = Math.min(
-          boundedOffset(REQUEUE_MIN_GAP, REQUEUE_MAX_GAP),
-          newQueue.length
-        );
+        const remaining = newQueue.length;
+        const minPos = Math.min(remaining, Math.max(REQUEUE_MIN_GAP, Math.floor(remaining / 2)));
+        const insertAt = minPos + Math.floor(Math.random() * (remaining - minPos + 1));
         newQueue.splice(insertAt, 0, { subjectId, promptType });
       }
 
