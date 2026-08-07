@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback, useRef } from "react";
+import { useEffect, useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useSessionStore, ReviewSubject } from "@/store/session";
 import { saveReviewItem, finalizeReviewSession } from "@/lib/actions/reviews";
@@ -17,8 +17,16 @@ export function ReviewSession({ subjects, acceptAllReadings = true }: Props) {
   const router = useRouter();
   const store = useSessionStore();
 
+  // The queue is built client-side in a mount effect, so the store's queue is
+  // empty on the server render and the first client render. Without this flag
+  // that empty queue reads as "Session complete!" — which is what a visitor on
+  // a slow connection sees until hydration runs. Only trust queueEmpty once we
+  // have actually initialized this session.
+  const [ready, setReady] = useState(false);
+
   useEffect(() => {
     store.initSession(subjects);
+    setReady(true);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -81,6 +89,14 @@ export function ReviewSession({ subjects, acceptAllReadings = true }: Props) {
   const correctPct = store.history.length === 0 ? 100
     : Math.round(store.history.filter(h => h.correct).length / store.history.length * 100);
   const queueEmpty = store.queue.length === 0;
+
+  if (!ready) {
+    return (
+      <main className="flex-1 flex items-center justify-center text-subtext">
+        Loading review…
+      </main>
+    );
+  }
 
   if (queueEmpty) {
     return (

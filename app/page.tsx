@@ -5,6 +5,7 @@ import { ReviewForecast } from "@/components/dashboard/ReviewForecast";
 import { HeatmapCalendar } from "@/components/dashboard/HeatmapCalendar";
 import { getDueReviewCount } from "@/lib/actions/reviews";
 import { getAvailableLessonCount } from "@/lib/actions/lessons";
+import { lessonBatchCount } from "@/lib/lessons";
 import { getSettings } from "@/lib/actions/settings";
 import { getReviewForecast, getHeatmapData, getStreakCount } from "@/lib/actions/forecast";
 import { prisma } from "@/lib/prisma";
@@ -93,6 +94,8 @@ export default async function Dashboard() {
 
   const radicalPct = radicalTotal ? Math.round((radicalsGuru / radicalTotal) * 100) : 0;
   const kanjiPct = kanjiTotal ? Math.round((kanjiGuru / kanjiTotal) * 100) : 0;
+  // The tile shows the next session's batch, not the whole backlog.
+  const lessonBatch = lessonBatchCount(lessonCount, settings.batch_size);
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -129,8 +132,10 @@ export default async function Dashboard() {
               lessonCount === 0 ? "opacity-50 pointer-events-none" : ""
             }`}
           >
-            <div className="text-4xl font-bold text-blue">{lessonCount}</div>
-            <div className="text-subtext mt-1">Lessons available</div>
+            <div className="text-4xl font-bold text-blue">{lessonBatch}</div>
+            <div className="text-subtext mt-1">
+              {lessonCount > lessonBatch ? `Next batch · ${lessonCount} available` : "Lessons available"}
+            </div>
           </Link>
 
           <Link
