@@ -4,7 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useSessionStore } from "@/store/session";
 import { SubjectBadge } from "@/components/shared/SubjectBadge";
 import { SrsChip } from "@/components/shared/SrsChip";
-import { Mnemonic } from "@/components/shared/Mnemonic";
+import { AnswerDetails } from "./AnswerDetails";
 import * as wanakana from "wanakana";
 
 type AnswerState = "idle" | "correct" | "wrong";
@@ -12,9 +12,11 @@ type AnswerState = "idle" | "correct" | "wrong";
 export function TypedReviewCard({
   acceptAllReadings = true,
   selfStudy = false,
+  speedMode = false,
 }: {
   acceptAllReadings?: boolean;
   selfStudy?: boolean;
+  speedMode?: boolean;
 }) {
   const store = useSessionStore();
   const current = store.currentItem();
@@ -89,8 +91,18 @@ export function TypedReviewCard({
       correct = candidates.some((r) => r === liveValue.trim());
     }
 
+    // Speed mode: a correct answer skips the acknowledge step and advances
+    // straight to the next card. Wrong answers always pause so you can read
+    // the expected answer and details.
+    if (correct && speedMode) {
+      store.submitAnswer(subject.id, promptType, liveValue, true);
+      setAnswer("");
+      setAnswerState("idle");
+      return;
+    }
+
     setAnswerState(correct ? "correct" : "wrong");
-  }, [current, answer, answerState, acceptAllReadings]);
+  }, [current, answer, answerState, acceptAllReadings, speedMode, store]);
 
   const handleNext = useCallback(
     (override?: boolean) => {
@@ -240,47 +252,7 @@ export function TypedReviewCard({
         )}
       </div>
 
-      {answerState !== "idle" && (
-        <div className="p-4 bg-surface0 rounded-lg space-y-3 text-sm">
-          <div>
-            <div className="text-xs text-subtext mb-1">Meanings</div>
-            <div className="text-text">{subject.meanings.join(", ")}</div>
-          </div>
-
-          {subject.type === "kanji" ? (
-            <div className="flex gap-8">
-              {(subject.onyomi ?? []).length > 0 && (
-                <div>
-                  <div className="text-xs text-subtext mb-1">On&apos;yomi</div>
-                  <div className="text-text" lang="ja">{(subject.onyomi ?? []).join("、")}</div>
-                </div>
-              )}
-              {(subject.kunyomi ?? []).length > 0 && (
-                <div>
-                  <div className="text-xs text-subtext mb-1">Kun&apos;yomi</div>
-                  <div className="text-text" lang="ja">{(subject.kunyomi ?? []).join("、")}</div>
-                </div>
-              )}
-            </div>
-          ) : subject.type === "vocabulary" && subject.readings.length > 0 ? (
-            <div>
-              <div className="text-xs text-subtext mb-1">Reading</div>
-              <div className="text-text" lang="ja">{subject.readings.join("、")}</div>
-            </div>
-          ) : null}
-
-          <div>
-            <div className="text-xs text-subtext mb-1">Meaning mnemonic</div>
-            <div className="text-text leading-relaxed"><Mnemonic text={subject.meaningMnemonic} /></div>
-          </div>
-          {subject.type !== "radical" && (
-            <div>
-              <div className="text-xs text-subtext mb-1">Reading mnemonic</div>
-              <div className="text-text leading-relaxed"><Mnemonic text={subject.readingMnemonic} /></div>
-            </div>
-          )}
-        </div>
-      )}
+      {answerState !== "idle" && <AnswerDetails subject={subject} />}
 
       {(itemState.incorrectMeaningCount > 0 || itemState.incorrectReadingCount > 0) && (
         <div className="text-center text-xs text-red">

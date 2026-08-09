@@ -145,6 +145,19 @@ export function ReviewSession({ subjects, acceptAllReadings = true }: Props) {
           >
             {store.flashcardMode ? "Flashcard ✓" : "Flashcard"}
           </button>
+          {!store.flashcardMode && (
+            <button
+              onClick={store.toggleSpeed}
+              className={`text-xs px-2 py-0.5 rounded border transition-colors ${
+                store.speedMode
+                  ? "border-mauve text-mauve"
+                  : "border-surface1 text-subtext hover:border-mauve hover:text-mauve"
+              }`}
+              title="Correct answers skip the extra Enter"
+            >
+              {store.speedMode ? "Speed ✓" : "Speed"}
+            </button>
+          )}
           <button
             onClick={endSession}
             className="text-xs px-2 py-0.5 rounded border border-surface1 text-subtext hover:border-red hover:text-red transition-colors"
@@ -169,7 +182,7 @@ export function ReviewSession({ subjects, acceptAllReadings = true }: Props) {
         ) : store.flashcardMode ? (
           <FlashCard />
         ) : (
-          <TypedReviewCard acceptAllReadings={acceptAllReadings} />
+          <TypedReviewCard acceptAllReadings={acceptAllReadings} speedMode={store.speedMode} />
         )}
       </div>
 

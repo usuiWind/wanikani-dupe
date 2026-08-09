@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useSessionStore } from "@/store/session";
 import { SubjectBadge } from "@/components/shared/SubjectBadge";
 import { SrsChip } from "@/components/shared/SrsChip";
+import { AnswerDetails } from "./AnswerDetails";
 
 export function FlashCard() {
   const store = useSessionStore();
@@ -65,6 +66,7 @@ export function FlashCard() {
                 : subject.readings.join(" / ")}
             </div>
           </div>
+          <AnswerDetails subject={subject} />
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => grade(true)}

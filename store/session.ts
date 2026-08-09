@@ -53,6 +53,7 @@ interface SessionStore {
   historyViewIndex: number | null; // null = viewing current card
   pendingUndo: HistoryEntry | null;
   flashcardMode: boolean;
+  speedMode: boolean; // typed mode only: correct answers auto-advance
   completed: string[]; // subject ids fully answered this session
 
   initSession: (subjects: ReviewSubject[], flashcardDefault?: boolean) => void;
@@ -62,6 +63,7 @@ interface SessionStore {
   goBack: () => void;
   goForward: () => void;
   toggleFlashcard: () => void;
+  toggleSpeed: () => void;
   getItemState: (subjectId: string) => ItemState;
   totalCount: () => number;
   completedCount: () => number;
@@ -114,6 +116,7 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
   historyViewIndex: null,
   pendingUndo: null,
   flashcardMode: false,
+  speedMode: false,
   completed: [],
 
   initSession(subjects, flashcardDefault = false) {
@@ -272,6 +275,10 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
   toggleFlashcard() {
     set((state) => ({ flashcardMode: !state.flashcardMode }));
+  },
+
+  toggleSpeed() {
+    set((state) => ({ speedMode: !state.speedMode }));
   },
 
   getItemState(subjectId) {
