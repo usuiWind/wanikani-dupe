@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useSessionStore } from "@/store/session";
 import { SubjectBadge } from "@/components/shared/SubjectBadge";
 import { SrsChip } from "@/components/shared/SrsChip";
+import { computeNextStage } from "@/lib/srs";
 import { AnswerDetails } from "./AnswerDetails";
 
 export function FlashCard() {
@@ -39,6 +40,19 @@ export function FlashCard() {
   if (!current) return null;
   const { subject, promptType } = current;
 
+  // Same projection as the typed card: if grading this correct finishes the
+  // card, show the SRS stage the server will save (identical computeNextStage)
+  // so you can confirm the grade lands accurately.
+  const itemState = store.getItemState(subject.id);
+  const needsReading = subject.type !== "radical";
+  const meaningDone = promptType === "meaning" ? true : itemState.meaningAnswered;
+  const readingDone = !needsReading ? true : promptType === "reading" ? true : itemState.readingAnswered;
+  const willComplete = meaningDone && readingDone;
+  const projectedStage = computeNextStage(
+    subject.srsStage,
+    itemState.incorrectMeaningCount + itemState.incorrectReadingCount
+  );
+
   return (
     <div className="w-full max-w-xl space-y-6">
       <div className="flex flex-col items-center gap-3">
@@ -67,6 +81,27 @@ export function FlashCard() {
             </div>
           </div>
           <AnswerDetails subject={subject} />
+          {willComplete && (
+            <div
+              key={`${subject.id}-${projectedStage}`}
+              className="srs-pop flex flex-col items-center gap-1"
+              title="Stage the SRS will save if you grade this correct"
+            >
+              <span className="text-xs text-subtext">If correct:</span>
+              <div className="flex items-center gap-2">
+                <SrsChip stage={subject.srsStage} />
+                <span
+                  className={`text-lg leading-none ${
+                    projectedStage > subject.srsStage ? "text-green"
+                    : projectedStage < subject.srsStage ? "text-red" : "text-subtext"
+                  }`}
+                >
+                  {projectedStage > subject.srsStage ? "▲" : projectedStage < subject.srsStage ? "▼" : "="}
+                </span>
+                <SrsChip stage={projectedStage} />
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <button
               onClick={() => grade(true)}

@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useSessionStore } from "@/store/session";
 import { SubjectBadge } from "@/components/shared/SubjectBadge";
 import { SrsChip } from "@/components/shared/SrsChip";
+import { computeNextStage } from "@/lib/srs";
 import { AnswerDetails } from "./AnswerDetails";
 import * as wanakana from "wanakana";
 
@@ -157,6 +158,18 @@ export function TypedReviewCard({
   const { subject, promptType } = current;
   const itemState = store.getItemState(subject.id);
 
+  // When this correct answer finishes the card, project the SRS stage the server
+  // will save — using the same computeNextStage the grading uses — so the
+  // upgrade/downgrade is visible in real time and you can confirm it's accurate.
+  const needsReading = subject.type !== "radical";
+  const meaningDone = promptType === "meaning" ? true : itemState.meaningAnswered;
+  const readingDone = !needsReading ? true : promptType === "reading" ? true : itemState.readingAnswered;
+  const willComplete = answerState === "correct" && meaningDone && readingDone;
+  const projectedStage = computeNextStage(
+    subject.srsStage,
+    itemState.incorrectMeaningCount + itemState.incorrectReadingCount
+  );
+
   const borderColor =
     answerState === "correct" ? "border-green"
     : answerState === "wrong" ? "border-red"
@@ -208,6 +221,25 @@ export function TypedReviewCard({
               ? subject.meanings.join(", ")
               : subject.readings.join(", ")
           }`}
+        </div>
+      )}
+
+      {willComplete && (
+        <div
+          key={`${subject.id}-${projectedStage}`}
+          className="srs-pop flex items-center justify-center gap-2"
+          title="Stage the SRS will save for this card"
+        >
+          <SrsChip stage={subject.srsStage} />
+          <span
+            className={`text-lg leading-none ${
+              projectedStage > subject.srsStage ? "text-green"
+              : projectedStage < subject.srsStage ? "text-red" : "text-subtext"
+            }`}
+          >
+            {projectedStage > subject.srsStage ? "▲" : projectedStage < subject.srsStage ? "▼" : "="}
+          </span>
+          <SrsChip stage={projectedStage} />
         </div>
       )}
 

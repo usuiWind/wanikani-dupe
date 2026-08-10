@@ -59,4 +59,31 @@ for (const [stage, hrs] of Object.entries(accel)) {
 // --- scheduleNextReview: burned never gets scheduled ----------------------
 assert.strictEqual(scheduleNextReview(9, 3, t), null, "Burned → no next review");
 
+// --- mastery lifecycle: an item climbs each rank in order, then burns ------
+// Start a fresh Apprentice-1 item and answer it correctly every time. It must
+// visit every mastery rank exactly in WaniKani's order and stop at Burned.
+{
+  let stage = 1;
+  const journey: string[] = [getSrsGroup(stage)];
+  for (let i = 0; i < 8; i++) {
+    stage = computeNextStage(stage, 0);
+    journey.push(getSrsGroup(stage));
+  }
+  assert.strictEqual(stage, 9, "8 clean passes from Apprentice 1 reach Burned");
+  assert.deepStrictEqual(
+    journey,
+    ["apprentice", "apprentice", "apprentice", "apprentice", "guru", "guru", "master", "enlightened", "burned"],
+    "mastery ranks are visited in order"
+  );
+  // Burned is terminal: further correct reviews don't advance, and it's never rescheduled.
+  assert.strictEqual(computeNextStage(stage, 0), 9, "Burned stays Burned");
+  assert.strictEqual(scheduleNextReview(stage, 3, t), null, "Burned item is not rescheduled");
+}
+
+// --- mastery demotion: a miss knocks the rank back down -------------------
+// An Enlightened item answered wrong drops out of Enlightened, and a Guru miss
+// falls all the way back to Apprentice (Guru+ penalty factor 2).
+assert.strictEqual(getSrsGroup(computeNextStage(8, 1)), "guru", "Enlightened miss → Guru");
+assert.strictEqual(getSrsGroup(computeNextStage(5, 1)), "apprentice", "Guru miss → Apprentice");
+
 console.log("OK: SRS engine matches WaniKani intervals + stage math");

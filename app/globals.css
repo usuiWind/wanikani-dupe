@@ -50,3 +50,11 @@ body {
   background: var(--base);
   color: var(--text);
 }
+
+/* Pop the SRS stage-change indicator so an upgrade/downgrade is easy to catch. */
+@keyframes srs-pop {
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.srs-pop { animation: srs-pop 0.45s ease-out; }
