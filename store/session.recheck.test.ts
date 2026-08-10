@@ -13,9 +13,10 @@ const st = useSessionStore.getState();
 // Enough cards that the requeued prompt lands mid-queue, not clamped to the end.
 st.initSession(Array.from({ length: 30 }, (_, i) => s(`s${i}`)));
 
-// Full-shuffle queue: every vocab subject contributes exactly one meaning and
-// one reading prompt, and they are NOT pinned a few slots apart (no reading is
-// forced to sit right after its own meaning across the whole queue).
+// Paired queue: every vocab subject contributes exactly one meaning and one
+// reading prompt, and each reading lands a short span AFTER its own meaning so
+// the pair completes together (keeping the done-counter and per-item saves
+// ticking through the session instead of stalling under a full shuffle).
 {
   const built = useSessionStore.getState().queue;
   assert.strictEqual(built.length, 60, "30 subjects → 30 meaning + 30 reading prompts");
@@ -24,9 +25,9 @@ st.initSession(Array.from({ length: 30 }, (_, i) => s(`s${i}`)));
   const meanGaps = built.map((q, i) => ({ q, i }))
     .filter(({ q }) => q.promptType === "reading")
     .map(({ q, i }) => i - built.findIndex(m => m.subjectId === q.subjectId && m.promptType === "meaning"));
-  // The old bug pinned every reading 2-7 slots AFTER its meaning. A full shuffle
-  // must produce at least one reading landing before its meaning (negative gap).
-  assert.ok(meanGaps.some(g => g < 0), "readings are not all pinned after their meaning");
+  // Every reading must sit after its meaning by at least the min pair gap
+  // (later inserts only widen the gap, never shrink it below the floor).
+  assert.ok(meanGaps.every(g => g >= 2), "every reading must follow its meaning by ≥2 slots");
 }
 
 // Miss the very first card. It must NOT come back as the next card.
@@ -36,9 +37,9 @@ let q = useSessionStore.getState().queue;
 assert.notStrictEqual(q[0].subjectId + q[0].promptType, missed.subjectId + missed.promptType,
   "missed prompt must not be the very next card");
 const gap = q.findIndex(i => i.subjectId === missed.subjectId && i.promptType === missed.promptType);
-// 60 prompts, one answered → 59 remain, so the miss lands in the back half:
-// at least floor(59/2) = 29 cards out. Proves short-term recall is defeated.
-assert.ok(gap >= 29, `missed prompt should return in the back half, got ${gap + 1} cards out`);
+// Bounded window: the miss returns 5..12 cards out (0-based index 5..12).
+// Far enough to defeat rote echo, close enough to relearn in-session.
+assert.ok(gap >= 5 && gap <= 12, `missed prompt should return 5-12 cards out, got ${gap} (0-based)`);
 
 // Drain, answering every card correctly, counting how many times the missed
 // prompt reappears: requeue (now correct) + exactly ONE end recheck = 2.
