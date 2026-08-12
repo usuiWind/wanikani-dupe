@@ -32,10 +32,6 @@ interface ItemState {
   meaningAnswered: boolean;
   readingAnswered: boolean;
   everWrong: boolean;
-  // A missed prompt gets exactly one end-of-session recheck; these guard
-  // against scheduling a second one.
-  meaningRechecked: boolean;
-  readingRechecked: boolean;
 }
 
 export interface HistoryEntry {
@@ -76,8 +72,6 @@ const defaultItemState = (): ItemState => ({
   meaningAnswered: false,
   readingAnswered: false,
   everWrong: false,
-  meaningRechecked: false,
-  readingRechecked: false,
 });
 
 function shuffle<T>(arr: T[]): T[] {
@@ -90,8 +84,8 @@ function shuffle<T>(arr: T[]): T[] {
 
 // A missed prompt is requeued a moderate, bounded number of cards later — far
 // enough that you can't just echo back the spelling you were shown, close
-// enough that you actually get to relearn it in-session. On top of that, every
-// missed prompt gets one final recheck appended to the very end of the session.
+// enough that you actually get to relearn it in-session. Once answered
+// correctly a card is done for the session and never reappears.
 const REQUEUE_MIN_GAP = 5;
 const REQUEUE_MAX_GAP = 12;
 
@@ -203,22 +197,6 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
         newQueue.splice(insertAt, 0, { subjectId, promptType });
       }
 
-      // If this prompt was missed earlier and is now finally correct, append
-      // one final recheck to the end of the session — but only once.
-      if (correct) {
-        const missedThis = promptType === "meaning"
-          ? itemSt.incorrectMeaningCount > 0
-          : itemSt.incorrectReadingCount > 0;
-        const alreadyScheduled = promptType === "meaning"
-          ? itemSt.meaningRechecked
-          : itemSt.readingRechecked;
-        if (missedThis && !alreadyScheduled) {
-          newQueue.push({ subjectId, promptType });
-          if (promptType === "meaning") itemSt.meaningRechecked = true;
-          else itemSt.readingRechecked = true;
-        }
-      }
-
       const newCompleted = fullyAnswered && !state.completed.includes(subjectId)
         ? [...state.completed, subjectId]
         : state.completed;
@@ -248,15 +226,13 @@ export const useSessionStore = create<SessionStore>((set, get) => ({
 
     if (promptType === "meaning") {
       itemSt.meaningAnswered = false;
-      itemSt.meaningRechecked = false;
     } else {
       itemSt.readingAnswered = false;
-      itemSt.readingRechecked = false;
     }
 
-    // Put the prompt back at the front of the queue. Drop every other copy of
-    // this exact prompt first — a mid-queue requeue (wrong) or the appended
-    // end-of-session recheck (correct) — so undo can't leave a duplicate.
+    // Put the prompt back at the front of the queue. Drop any other copy of
+    // this exact prompt first — a mid-queue requeue from a wrong answer — so
+    // undo can't leave a duplicate.
     const filtered = queue.filter(
       (q) => !(q.subjectId === subjectId && q.promptType === promptType)
     );

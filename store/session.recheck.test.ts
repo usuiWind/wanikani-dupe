@@ -42,14 +42,15 @@ const gap = q.findIndex(i => i.subjectId === missed.subjectId && i.promptType ==
 assert.ok(gap >= 5 && gap <= 12, `missed prompt should return 5-12 cards out, got ${gap} (0-based)`);
 
 // Drain, answering every card correctly, counting how many times the missed
-// prompt reappears: requeue (now correct) + exactly ONE end recheck = 2.
+// prompt reappears: just the one requeue — once answered right it's done, with
+// no end-of-session recheck.
 let seen = 0, guard = 0;
 while (useSessionStore.getState().queue.length > 0 && guard++ < 500) {
   const cur = useSessionStore.getState().queue[0];
   if (cur.subjectId === missed.subjectId && cur.promptType === missed.promptType) seen++;
   st.submitAnswer(cur.subjectId, cur.promptType, "ok", true);
 }
-assert.strictEqual(seen, 2, `expected requeue + exactly one end recheck, saw ${seen}`);
+assert.strictEqual(seen, 1, `expected exactly one requeue and no end recheck, saw ${seen}`);
 assert.strictEqual(useSessionStore.getState().queue.length, 0, "session should drain");
 
-console.log("OK: widened requeue gap + single end recheck");
+console.log("OK: requeue gap + no end recheck");
