@@ -8,6 +8,7 @@ interface LessonSubject {
   id: string;
   type: "radical" | "kanji" | "vocabulary";
   characters: string | null;
+  imageUrl?: string | null;
   meanings: string[];
   readings: string[];
   primaryReading: string | null;
@@ -36,6 +37,7 @@ export function LessonQuiz({
   const [answer, setAnswer] = useState("");
   const [answerState, setAnswerState] = useState<AnswerState>("idle");
   const inputRef = useRef<HTMLInputElement>(null);
+  const isBound = useRef(false);
 
   const subjectMap = Object.fromEntries(subjects.map((s) => [s.id, s]));
   const current = queue[0];
@@ -43,10 +45,26 @@ export function LessonQuiz({
 
   const bindWanakana = useCallback(
     (el: HTMLInputElement | null) => {
-      if (el && current?.promptType === "reading") {
-        wanakana.bind(el, { IMEMode: true });
+      const ref = inputRef as React.MutableRefObject<HTMLInputElement | null>;
+      if (!el) {
+        if (ref.current && isBound.current) {
+          wanakana.unbind(ref.current);
+          isBound.current = false;
+        }
+        ref.current = null;
+        return;
       }
-      (inputRef as React.MutableRefObject<HTMLInputElement | null>).current = el;
+      // Always unbind before rebinding — leaving a reading prompt bound in IME
+      // mode freezes the next meaning prompt's input.
+      if (isBound.current) {
+        wanakana.unbind(el);
+        isBound.current = false;
+      }
+      if (current?.promptType === "reading") {
+        wanakana.bind(el, { IMEMode: true });
+        isBound.current = true;
+      }
+      ref.current = el;
     },
     [current?.promptType]
   );
@@ -59,14 +77,17 @@ export function LessonQuiz({
 
   const handleSubmit = useCallback(() => {
     if (!current || !subject || answerState !== "idle") return;
-    const trimmed = answer.trim().toLowerCase();
+    // Read the live DOM value to catch any pending wanakana conversion React state hasn't synced yet.
+    const liveValue = inputRef.current?.value ?? answer;
+    if (liveValue !== answer) setAnswer(liveValue);
+    const trimmed = liveValue.trim().toLowerCase();
     if (!trimmed) return;
 
     let correct = false;
     if (current.promptType === "meaning") {
       correct = subject.meanings.some((m) => m.toLowerCase() === trimmed);
     } else {
-      correct = subject.readings.some((r) => r === answer.trim());
+      correct = subject.readings.some((r) => r === liveValue.trim());
     }
     setAnswerState(correct ? "correct" : "wrong");
   }, [current, subject, answer, answerState]);
@@ -127,7 +148,7 @@ export function LessonQuiz({
         <div className="text-center text-sm text-subtext">{queue.length} remaining</div>
 
         <div className="flex justify-center">
-          <SubjectBadge type={subject.type} characters={subject.characters} size="xl" />
+          <SubjectBadge type={subject.type} characters={subject.characters} imageUrl={subject.imageUrl} fallbackLabel={subject.meanings[0]} size="xl" />
         </div>
 
         <div className="text-center text-lg font-semibold text-text capitalize">
