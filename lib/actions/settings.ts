@@ -41,15 +41,19 @@ export async function toggleCatchUpMode() {
   const now = new Date();
 
   if (settings.review_freeze_at) {
-    // Disabling: shift every scheduled review forward by the paused duration so
-    // the backlog you cleared returns on its normal spacing, not all at once.
-    const elapsed = now.getTime() - settings.review_freeze_at.getTime();
+    // Disabling: shift the reviews the freeze was hiding forward by the paused
+    // duration so they return on their normal spacing, not all at once. Cards
+    // already due at the freeze stay due, and cards reviewed during the freeze
+    // were scheduled from the real clock, so neither is shifted.
+    const frozenAt = settings.review_freeze_at;
+    const elapsed = now.getTime() - frozenAt.getTime();
 
     if (elapsed > 0) {
       await prisma.$executeRaw`
         UPDATE "StudyProgress"
         SET next_review_at = next_review_at + (${elapsed} * interval '1 millisecond')
-        WHERE next_review_at IS NOT NULL AND srs_stage >= 1 AND srs_stage <= 8
+        WHERE next_review_at > ${frozenAt} AND srs_stage >= 1 AND srs_stage <= 8
+          AND (last_reviewed_at IS NULL OR last_reviewed_at < ${frozenAt})
       `;
     }
 

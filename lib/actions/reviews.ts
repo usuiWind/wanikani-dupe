@@ -3,6 +3,8 @@
 import { prisma } from "@/lib/prisma";
 import { computeNextStage, scheduleNextReview } from "@/lib/srs";
 import { computeLeechScore } from "@/lib/leech";
+import { getCurrentLevel } from "@/lib/level";
+import type { Prisma } from "@/app/generated/prisma";
 import { revalidatePath } from "next/cache";
 
 export async function getDueReviewCount(): Promise<number> {
@@ -144,41 +146,49 @@ async function incrementDailyActivity(
 
 export { incrementDailyActivity };
 
-async function unlockDependents(componentId: string, now: Date) {
-  const dependents = await prisma.subject.findMany({
-    where: { components: { some: { component_id: componentId } } },
-    include: {
+// Unlock every still-locked subject matching `where` whose components are all
+// Guru+. Radicals have no components, so they always qualify.
+async function unlockReady(where: Prisma.SubjectWhereInput, now: Date) {
+  const locked = await prisma.subject.findMany({
+    where: { ...where, OR: [{ progress: null }, { progress: { unlocked_at: null } }] },
+    select: {
+      id: true,
       components: {
-        include: { component: { include: { progress: true } } },
+        select: { component: { select: { progress: { select: { srs_stage: true } } } } },
       },
-      progress: true,
     },
   });
 
-  for (const dep of dependents) {
-    if (dep.progress?.srs_stage !== null) continue;
-    const allGuruPlus = dep.components.every(
+  for (const s of locked) {
+    const allGuruPlus = s.components.every(
       (c) => (c.component.progress?.srs_stage ?? 0) >= 5
     );
     if (allGuruPlus) {
       await prisma.studyProgress.upsert({
-        where: { subject_id: dep.id },
+        where: { subject_id: s.id },
         update: { unlocked_at: now },
-        create: { subject_id: dep.id, unlocked_at: now },
+        create: { subject_id: s.id, unlocked_at: now },
       });
     }
   }
 }
 
-async function checkLevelUp(now: Date) {
-  const latestProgress = await prisma.studyProgress.findFirst({
-    where: { started_at: { not: null }, srs_stage: { gte: 1, lte: 8 } },
-    include: { subject: { select: { level: true } } },
-    orderBy: { started_at: "desc" },
-  });
+async function unlockDependents(componentId: string, now: Date) {
+  const currentLevel = await getCurrentLevel();
+  if (!currentLevel) return;
+  // Level-gated: items above the current level wait for the level-up.
+  await unlockReady(
+    { components: { some: { component_id: componentId } }, level: { lte: currentLevel } },
+    now
+  );
+}
 
-  if (!latestProgress) return;
-  const currentLevel = latestProgress.subject.level;
+async function checkLevelUp(now: Date) {
+  const currentLevel = await getCurrentLevel();
+  if (!currentLevel) return;
+
+  // Catch anything at or below the current level that should already be unlocked.
+  await unlockReady({ level: { lte: currentLevel } }, now);
 
   const radicals = await prisma.subject.findMany({
     where: { level: currentLevel, type: "radical" },
@@ -196,19 +206,9 @@ async function checkLevelUp(now: Date) {
   const kanjiGuruCount = kanji.filter((k) => (k.progress?.srs_stage ?? 0) >= 5).length;
   if (kanji.length === 0 || kanjiGuruCount / kanji.length < 0.9) return;
 
-  const nextLevel = currentLevel + 1;
-  const nextRadicals = await prisma.subject.findMany({
-    where: { level: nextLevel, type: "radical" },
-    include: { progress: true },
-  });
-
-  for (const r of nextRadicals) {
-    if (!r.progress) {
-      await prisma.studyProgress.create({
-        data: { subject_id: r.id, unlocked_at: now },
-      });
-    }
-  }
+  // Level up: next level's radicals, plus its kanji/vocab whose components are
+  // already Guru+ from earlier levels.
+  await unlockReady({ level: currentLevel + 1 }, now);
 }
 
 export async function unburnItem(subjectId: string) {

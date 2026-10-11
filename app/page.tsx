@@ -9,13 +9,14 @@ import { lessonBatchCount } from "@/lib/lessons";
 import { getSettings } from "@/lib/actions/settings";
 import { getReviewForecast, getHeatmapData, getStreakCount } from "@/lib/actions/forecast";
 import { prisma } from "@/lib/prisma";
+import { getCurrentLevel } from "@/lib/level";
 import { getSrsGroup } from "@/lib/srs";
 
 async function getDashboardData() {
   // Round 1: fetch everything that doesn't depend on current level in parallel
   const [
     dueCount, lessonCount, settings, forecast, heatmap, streak,
-    latestProgress, stageCounts,
+    unlockedLevel, stageCounts,
   ] = await Promise.all([
     getDueReviewCount(),
     getAvailableLessonCount(),
@@ -23,11 +24,7 @@ async function getDashboardData() {
     getReviewForecast(),
     getHeatmapData(),
     getStreakCount(),
-    prisma.studyProgress.findFirst({
-      where: { started_at: { not: null }, srs_stage: { gte: 1, lte: 8 } },
-      select: { subject: { select: { level: true } } },
-      orderBy: { started_at: "desc" },
-    }),
+    getCurrentLevel(),
     prisma.studyProgress.groupBy({
       by: ["srs_stage"],
       where: { srs_stage: { not: null } },
@@ -35,10 +32,10 @@ async function getDashboardData() {
     }),
   ]);
 
-  const currentLevel = latestProgress?.subject.level ?? 1;
+  const currentLevel = unlockedLevel ?? 1;
 
   // Auto-unlock Level 1 radicals only if no progress exists at all
-  if (!latestProgress && lessonCount === 0) {
+  if (!unlockedLevel && lessonCount === 0) {
     const level1Radicals = await prisma.subject.findMany({
       where: { level: 1, type: "radical" },
       select: { id: true },

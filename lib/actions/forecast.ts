@@ -1,6 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
+import { getCurrentLevel } from "@/lib/level";
 
 export interface ForecastBucket {
   label: string;
@@ -20,13 +21,7 @@ export async function getReviewForecast() {
   const frozen = settings?.review_freeze_at ?? null;
   const cutoff = frozen ?? now;
 
-  // Find current level
-  const latestProgress = await prisma.studyProgress.findFirst({
-    where: { started_at: { not: null }, srs_stage: { gte: 1, lte: 8 } },
-    include: { subject: { select: { level: true } } },
-    orderBy: { started_at: "desc" },
-  });
-  const currentLevel = latestProgress?.subject.level ?? 1;
+  const currentLevel = (await getCurrentLevel()) ?? 1;
 
   const upcoming = frozen
     ? []
